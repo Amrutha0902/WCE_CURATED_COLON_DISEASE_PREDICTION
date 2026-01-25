@@ -475,23 +475,5 @@ Click "Download CSV Report"
 
 ---
 
-## 📞 Support
-
-**GitHub Repository:**  
-https://github.com/Amrutha0902/WCE_CURATED_COLON_DISEASE_PREDICTION
-
-**Features Implemented:**
-- ✅ User authentication & registration
-- ✅ CNN inference (VGG16)
-- ✅ MySQL predictions storage
-- ✅ Per-user data isolation
-- ✅ Analytics dashboard with date filtering
-- ✅ CSV export reports
-- ✅ Responsive UI with Chart.js
-- ✅ Session management
-- ✅ Protected routes (@login_required)
-
----
-
 **Last Updated:** January 2026  
 **Status:** Production Ready ✓
