@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Account - ColonPredict</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            background: #F7F9FB;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .auth-container {
+            width: 100%;
+            max-width: 500px;
+        }
+        .auth-box {
+            background: #ffffff;
+            border: 1px solid #E5E7EB;
+            border-radius: 12px;
+            padding: 3rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+        }
+        .auth-box h2 {
+            color: #1F2937;
+            font-size: 1.875rem;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+        .form-group label {
+            display: block;
+            color: #374151;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #D1D5DB;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #2563EB;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+        .submit-btn {
+            width: 100%;
+            background-color: #2563EB;
+            color: #ffffff;
+            padding: 0.875rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-top: 1rem;
+        }
+        .submit-btn:hover {
+            background-color: #1E40AF;
+        }
+        .error-message {
+            background-color: #FEE2E2;
+            border: 1px solid #FCA5A5;
+            color: #991B1B;
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        .success-message {
+            background-color: #D1FAE5;
+            border: 1px solid #6EE7B7;
+            color: #065F46;
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        .auth-footer {
+            text-align: center;
+            margin-top: 1.5rem;
+            color: #6B7280;
+        }
+        .auth-footer a {
+            color: #2563EB;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .auth-footer a:hover {
+            text-decoration: underline;
+        }
+        .back-home {
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+        .back-home a {
+            color: #6B7280;
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+        .back-home a:hover {
+            color: #2563EB;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-box">
+            <h2>Create Account</h2>
+            
+            {% if success_signup %}
+                <div class="success-message">{{ success_signup }}</div>
+            {% endif %}
+            
+            {% if error_signup %}
+                <div class="error-message">{{ error_signup }}</div>
+            {% endif %}
+            
+            <form action="{{ url_for('signup') }}" method="post">
+                <div class="form-group">
+                    <label for="signup_username">Username</label>
+                    <input type="text" id="signup_username" name="signup_username" placeholder="Choose a username" required>
+                </div>
+                <div class="form-group">
+                    <label for="signup_email">Email</label>
+                    <input type="email" id="signup_email" name="signup_email" placeholder="Enter your email" required>
+                </div>
+                <div class="form-group">
+                    <label for="signup_password">Password</label>
+                    <input type="password" id="signup_password" name="signup_password" placeholder="Create a password (min 6 chars)" required>
+                </div>
+                <div class="form-group">
+                    <label for="signup_confirm_password">Confirm Password</label>
+                    <input type="password" id="signup_confirm_password" name="signup_confirm_password" placeholder="Confirm your password" required>
+                </div>
+                <button type="submit" class="submit-btn">Create Account</button>
+            </form>
+            
+            <div class="auth-footer">
+                Already have an account? <a href="{{ url_for('login_page') }}">Sign in</a>
+            </div>
+            
+            <div class="back-home">
+                <a href="{{ url_for('index') }}">← Back to Home</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
