@@ -3,30 +3,429 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ColonPredict Home</title>
+    <title>ColonPredict - AI-Powered Colon Disease Detection</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        :root {
+            --primary-blue: #1E40AF;
+            --white: #FFFFFF;
+            --light-gray: #F3F4F6;
+            --border-gray: #E5E7EB;
+            --text-dark: #111827;
+            --text-muted: #6B7280;
+            --error-red: #DC2626;
+            --success-green: #059669;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--white);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: var(--text-dark);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        #signin-section {
+            scroll-margin-top: 24px;
+        }
+
+        .home-wrapper {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .home-content {
+            flex: 1;
+        }
+
+        /* HERO SECTION */
+        .hero-section {
+            background: var(--white);
+            padding: 60px 20px;
+        }
+
+        .hero-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            align-items: center;
+        }
+
+        .hero-left h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--primary-blue);
+            margin-bottom: 16px;
+            line-height: 1.2;
+        }
+
+        .hero-left p {
+            font-size: 1.125rem;
+            color: var(--text-muted);
+            margin-bottom: 32px;
+            line-height: 1.6;
+        }
+
+        .hero-left .features {
+            list-style: none;
+            margin: 24px 0 32px 0;
+        }
+
+        .hero-left .features li {
+            padding: 8px 0;
+            color: var(--text-dark);
+            font-weight: 500;
+        }
+
+        .hero-left .features li::before {
+            content: "✓ ";
+            color: var(--primary-blue);
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .hero-right img {
+            width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        /* AUTH CONTAINER */
+        .auth-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: var(--white);
+        }
+
+        .auth-box {
+            background: var(--light-gray);
+            border: 1px solid var(--border-gray);
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .auth-box h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 24px;
+            color: var(--primary-blue);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-dark);
+            font-size: 0.95rem;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border-gray);
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+            background: var(--white);
+            color: var(--text-dark);
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+        }
+
+        .form-group input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 12px 24px;
+            background: var(--primary-blue);
+            color: var(--white);
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 12px;
+        }
+
+        .submit-btn:hover {
+            background: #1e3a8a;
+            box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .message {
+            padding: 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+        }
+
+        .error-message {
+            background: #FEE2E2;
+            color: #DC2626;
+            border: 1px solid #FECACA;
+        }
+
+        .success-message {
+            background: #ECFDF5;
+            color: #059669;
+            border: 1px solid #A7F3D0;
+        }
+
+        .divider {
+            text-align: center;
+            margin: 20px 0;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            display: inline-block;
+            width: 100%;
+            height: 1px;
+            background: var(--border-gray);
+            vertical-align: middle;
+            margin: 0 8px;
+        }
+
+        .authenticated-user {
+            background: var(--light-gray);
+            border: 1px solid var(--border-gray);
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            margin: 40px auto;
+            max-width: 600px;
+        }
+
+        .authenticated-user h2 {
+            color: var(--success-green);
+            margin-bottom: 16px;
+            font-size: 1.5rem;
+        }
+
+        .authenticated-user p {
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            font-size: 1.05rem;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+        }
+
+        .nav-btn {
+            padding: 12px 28px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+
+        .nav-btn-primary {
+            background: var(--primary-blue);
+            color: var(--white);
+        }
+
+        .nav-btn-primary:hover {
+            background: #1e3a8a;
+            box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
+        }
+
+        .nav-btn-secondary {
+            background: var(--white);
+            color: var(--primary-blue);
+            border: 2px solid var(--primary-blue);
+        }
+
+        .nav-btn-secondary:hover {
+            background: var(--light-gray);
+        }
+
+        .logout-btn {
+            padding: 8px 16px;
+            background: #DC2626;
+            color: var(--white);
+            border: none;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+
+        .logout-btn:hover {
+            background: #991B1B;
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 768px) {
+            .hero-container {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-left h1 {
+                font-size: 2rem;
+            }
+
+            .auth-container {
+                grid-template-columns: 1fr;
+                padding: 20px;
+            }
+
+            .auth-box {
+                padding: 24px;
+            }
+        }
+    </style>
 </head>
 <body>
-    <nav>
-        <div class="logo">ColonPredict</div>
-        <div class="nav-items">
-            <a href="#home">Home</a>
-            <a href="#about">About</a>
-            <a href="{{ url_for('predict') }}">Predictions</a> <!-- Assuming 'predictor' is the endpoint for details.html -->
-            <a href="#contact">Contact</a>
-        </div>
-    </nav>
-    <section id="home" class="hero">
-        <div class="hero-container">
-            <div class="column-left">
-                <h1>ColoPredict</h1>
-                <p>Revolutionising Colon prediction through transfer learning mastery.</p>
-                <a href="{{ url_for('predict') }}"><button>GET STARTED</button></a>
+    <div class="home-wrapper">
+        <nav>
+            <div class="logo">ColonPredict</div>
+            <div class="nav-items">
+                <a href="{{ url_for('index') }}">Home</a>
+                <a href="{{ url_for('about') }}">About</a>
+                {% if is_logged_in %}
+                    <a href="{{ url_for('predict') }}">Predictions</a>
+                    <a href="{{ url_for('analysis') }}">Analysis</a>
+                {% endif %}
+                <a href="{{ url_for('contact') }}">Contact</a>
+                {% if is_logged_in %}
+                    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+                {% endif %}
             </div>
-            <div class="column-right">
-                <img src="{{ url_for('static', filename='images/index.jpg') }}" alt="Customer Support" class="hero-image">
-            </div>
+        </nav>
+
+        <div class="home-content">
+            <!-- HERO SECTION -->
+            <section class="hero-section">
+                <div class="hero-container">
+                    <div class="hero-left">
+                        <h1>ColonPredict</h1>
+                        <p>Revolutionary AI-powered colon disease detection using advanced deep learning and transfer learning techniques.</p>
+                        <ul class="features">
+                            <li>Accurate disease classification</li>
+                            <li>Fast analysis results</li>
+                            <li>Medical-grade precision</li>
+                            <li>Secure data handling</li>
+                        </ul>
+                    </div>
+                    <div class="hero-right">
+                        <img src="{{ url_for('static', filename='images/index.jpg') }}" alt="Colon Disease Prediction">
+                    </div>
+                </div>
+            </section>
+
+            <!-- INFO SECTION -->
+            {% if not is_logged_in %}
+                <section style="background: linear-gradient(135deg, #F7F9FB 0%, #E8F0FE 100%); padding: 60px 20px; margin: 40px 0;">
+                    <div style="max-width: 1200px; margin: 0 auto;">
+                        <h2 style="text-align: center; color: #1F2937; font-size: 2rem; margin-bottom: 40px;">ColonPredict Services</h2>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; max-width: 900px; margin: 0 auto;">
+                            <!-- Predictions Card -->
+                            <div style="background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); border-left: 4px solid #2563EB; display: flex; flex-direction: column;">
+                                <h3 style="color: #2563EB; font-size: 1.5rem; margin-bottom: 15px;">🔬 Predict Colon Disease</h3>
+                                <p style="color: #6B7280; line-height: 1.6; margin-bottom: 20px; flex-grow: 1;">Upload WCE (Wireless Capsule Endoscopy) images to get instant AI-powered predictions for colon disease classification. Our advanced deep learning model detects diseases including Normal, Ulcerative Colitis, Polyps, and Esophagitis.</p>
+                                <div style="text-align: center;">
+                                    <a href="#signin-section" style="display: inline-block; background-color: #2563EB; color: #fff; padding: 0.85rem 3rem; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 1rem; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#1E40AF'" onmouseout="this.style.backgroundColor='#2563EB'">Predict</a>
+                                </div>
+                            </div>
+
+                            <!-- Analysis Card -->
+                            <div style="background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); border-left: 4px solid #059669; display: flex; flex-direction: column;">
+                                <h3 style="color: #059669; font-size: 1.5rem; margin-bottom: 15px;">📊 View Analysis</h3>
+                                <p style="color: #6B7280; line-height: 1.6; margin-bottom: 20px; flex-grow: 1;">Access comprehensive analytics and detailed reports of all your predictions. Track patterns, compare results, and get insights from your historical prediction data with professional visualizations and statistics.</p>
+                                <div style="text-align: center;">
+                                    <a href="#signin-section" style="display: inline-block; background-color: #059669; color: #fff; padding: 0.85rem 3rem; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 1rem; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#047857'" onmouseout="this.style.backgroundColor='#059669'">View Analysis</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            {% endif %}
+
+            <!-- AUTH SECTION -->
+            {% if not is_logged_in %}
+                <div id="signin-section" class="auth-container" style="padding: 60px 20px; display: flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #F7F9FB 0%, #E8F0FE 100%);">
+                    <!-- LOGIN FORM ONLY -->
+                    <div class="auth-box" style="max-width: 600px; width: 100%; margin: 0 auto; padding: 40px;">
+                        <h2 style="font-size: 2rem; margin-bottom: 10px; text-align: center;">Sign In</h2>
+                        <p style="text-align: center; color: #6B7280; margin-bottom: 30px;">Access your ColonPredict account</p>
+                        
+                        {% if error_login %}
+                            <div class="message error-message">
+                                {{ error_login }}
+                            </div>
+                        {% endif %}
+
+                        <form method="POST" action="{{ url_for('login_home') }}">
+                            <div class="form-group">
+                                <label for="login_username">Username</label>
+                                <input type="text" id="login_username" name="login_username" placeholder="Enter your username" required style="padding: 0.85rem; font-size: 1rem;">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="login_password">Password</label>
+                                <input type="password" id="login_password" name="login_password" placeholder="Enter your password" required style="padding: 0.85rem; font-size: 1rem;">
+                            </div>
+
+                            <button type="submit" class="submit-btn" style="padding: 1rem; font-size: 1rem;">Sign In</button>
+                        </form>
+
+                        <div style="text-align: center; margin-top: 2rem; color: #6B7280; font-size: 1.05rem;">
+                            Don't have an account? <a href="{{ url_for('signup_page') }}" style="color: #2563EB; text-decoration: none; font-weight: 600;">Create account</a>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <!-- AUTHENTICATED USER VIEW -->
+                <div class="authenticated-user">
+                    <h2>Welcome, {{ session.get('username', 'Doctor') }}! 👋</h2>
+                    <p>You are successfully logged in. Access the prediction and analysis tools below.</p>
+                    <div class="nav-buttons">
+                        <a href="{{ url_for('predict') }}" class="nav-btn nav-btn-primary">Start Prediction</a>
+                        <a href="{{ url_for('analysis') }}" class="nav-btn nav-btn-primary">View Analysis</a>
+                    </div>
+                </div>
+            {% endif %}
         </div>
-    </section>
+    </div>
 </body>
 </html>

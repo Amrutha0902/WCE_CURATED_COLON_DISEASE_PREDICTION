@@ -7,7 +7,7 @@ from keras.models import load_model
 import numpy as np
 import mysql.connector
 from mysql.connector import Error
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 from functools import wraps
 import io
@@ -41,8 +41,38 @@ def get_db_connection():
         return None
 
 # Save Prediction to Database
+def ensure_predictions_user_column():
+    """Ensure predictions table has a username column to support per-user data."""
+    connection = get_db_connection()
+    if not connection:
+        return False
+    try:
+        cursor = connection.cursor()
+        check_query = """
+            SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema = %s AND table_name = 'predictions' AND column_name = 'username'
+        """
+        cursor.execute(check_query, (DB_CONFIG['database'],))
+        exists = cursor.fetchone()[0] > 0
+        if not exists:
+            alter_query = "ALTER TABLE predictions ADD COLUMN username VARCHAR(255) AFTER confidence"
+            cursor.execute(alter_query)
+            connection.commit()
+            print("Added username column to predictions table for per-user tracking")
+        cursor.close()
+        connection.close()
+        return True
+    except Error as e:
+        print(f"Schema check/add error: {e}")
+        connection.close()
+        return False
+
+
 def save_prediction_to_db(filename, predicted_class, confidence, image_path, username=None):
-    """Insert prediction result into MySQL database with username"""
+    """Insert prediction result into MySQL database with user association"""
+    # Ensure schema supports username; if not, attempt to add it
+    ensure_predictions_user_column()
+
     connection = get_db_connection()
     if connection:
         try:
@@ -53,12 +83,14 @@ def save_prediction_to_db(filename, predicted_class, confidence, image_path, use
             """
             cursor.execute(query, (filename, predicted_class, float(confidence), image_path, username))
             connection.commit()
-            print(f"Prediction saved for {username}: {filename} -> {predicted_class} ({confidence:.4f})")
+            print(f"Prediction saved: {filename} -> {predicted_class} ({confidence:.4f}) for user {username}")
             cursor.close()
             connection.close()
             return True
         except Error as e:
+            # Fallback: if username column truly missing or insert fails, log and skip insert to avoid silent data issues
             print(f"Database insert error: {e}")
+            connection.close()
             return False
     return False
 
@@ -73,26 +105,17 @@ def login_required(f):
 
 # Verify Doctor Credentials
 def verify_doctor_credentials(username, password):
-    """Verify login credentials against MySQL database (role-agnostic)"""
-    username = (username or "").strip()
-    password = (password or "").strip()
-
+    """Verify doctor login credentials against MySQL database"""
     connection = get_db_connection()
     if connection:
         try:
             cursor = connection.cursor()
-            # Fetch stored password and role for the username
-            query = "SELECT password, role FROM users WHERE username = %s"
-            cursor.execute(query, (username,))
-            row = cursor.fetchone()
+            query = "SELECT * FROM users WHERE username = %s AND password = %s AND role = 'doctor'"
+            cursor.execute(query, (username, password))
+            user = cursor.fetchone()
             cursor.close()
             connection.close()
-
-            if not row:
-                return False  # Username not found
-
-            stored_password, role = row
-            return stored_password == password
+            return user is not None
         except Error as e:
             print(f"Authentication error: {e}")
             return False
@@ -117,17 +140,13 @@ def user_exists(username):
     return False
 
 # Register new user
-def register_user(username, password, email, role='doctor'):
+def register_user(username, password, email=None, role='doctor'):
     """Register a new user in the database"""
-    username = (username or "").strip()
-    password = (password or "").strip()
-    email = (email or "").strip()
-    role = role or 'doctor'
-
     connection = get_db_connection()
     if connection:
         try:
             cursor = connection.cursor()
+            # Insert only the available columns to match existing schema
             query = "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)"
             cursor.execute(query, (username, password, role))
             connection.commit()
@@ -144,18 +163,23 @@ def index():
     is_logged_in = 'logged_in' in session
     return render_template('index.html', is_logged_in=is_logged_in)
 
+@app.route('/signup-page')
+def signup_page():
+    """Display Signup Page"""
+    return render_template('signup.html')
+
 @app.route('/signup', methods=['POST'])
 def signup():
     """User Signup Route"""
     username = request.form.get('signup_username')
     password = request.form.get('signup_password')
     confirm_password = request.form.get('signup_confirm_password')
-    email = request.form.get('signup_email')
+    email = request.form.get('signup_email')  # optional; ignored if column absent
     
     # Validation
-    if not username or not password or not confirm_password or not email:
+    if not username or not password or not confirm_password:
         return render_template('index.html', 
-                             error_signup="All fields are required",
+                             error_signup="Username and password are required",
                              is_logged_in=False)
     
     if password != confirm_password:
@@ -183,6 +207,11 @@ def signup():
                              error_signup="Registration failed. Please try again.",
                              is_logged_in=False)
 
+@app.route('/login-page')
+def login_page():
+    """Display Login Page"""
+    return render_template('login.html')
+
 @app.route('/login-home', methods=['POST'])
 def login_home():
     """Doctor Login Route from Home Page"""
@@ -193,7 +222,9 @@ def login_home():
     if verify_doctor_credentials(username, password):
         session['logged_in'] = True
         session['username'] = username
-        return redirect(url_for('index'))
+        return render_template('index.html', 
+                             success_login="Login successful! Redirecting...",
+                             is_logged_in=True)
     else:
         error = "Invalid username or password"
         return render_template('index.html', 
@@ -228,21 +259,45 @@ def contact():
 @login_required
 def analysis():
     """Data Analysis Dashboard - Query predictions and generate visualization"""
+    username = session.get('username')
+    if not username:
+        return redirect(url_for('login_page'))
+
+    # Date range filter
+    range_option = request.args.get('range', 'till_date')
+    now = datetime.now()
+    start_date = None
+    if range_option == 'today':
+        start_date = datetime.combine(now.date(), datetime.min.time())
+    elif range_option == 'week':
+        start_date = now - timedelta(days=7)
+    elif range_option == 'month':
+        start_date = now - timedelta(days=30)
+    elif range_option == 'six_months':
+        start_date = now - timedelta(days=182)
+    elif range_option == 'year':
+        start_date = now - timedelta(days=365)
+    # till_date -> no start_date filter
     try:
         connection = get_db_connection()
         
         if connection:
             try:
-                # Query predictions data for the current user only
-                username = session.get('username')
-                query = "SELECT predicted_class, confidence, prediction_timestamp FROM predictions WHERE username = %s"
-                df = pd.read_sql(query, connection, params=(username,))
+                # Query predictions data
+                base_query = "SELECT predicted_class, confidence, prediction_timestamp FROM predictions WHERE username = %s"
+                params = [username]
+                if start_date:
+                    base_query += " AND prediction_timestamp >= %s"
+                    params.append(start_date)
+                query = base_query + " ORDER BY prediction_timestamp DESC"
+                df = pd.read_sql(query, connection, params=tuple(params))
                 connection.close()
                 
                 if df.empty:
                     return render_template('analysis.html', 
-                                         error="No prediction data available yet. Make some predictions first!",
-                                         is_logged_in=True)
+                                         error="No prediction data for your account yet. Make some predictions first!",
+                                         is_logged_in=True,
+                                         selected_range=range_option)
                 
                 # Data Analysis: Class Distribution
                 # Define all possible disease classes
@@ -272,7 +327,7 @@ def analysis():
                     'chart_data': json.dumps(chart_data)  # Send data as JSON for Chart.js
                 }
                 
-                return render_template('analysis.html', stats=stats, is_logged_in=True)
+                return render_template('analysis.html', stats=stats, is_logged_in=True, selected_range=range_option)
                 
             except Exception as e:
                 print(f"Analysis error: {e}")
@@ -280,11 +335,13 @@ def analysis():
                 traceback.print_exc()
                 return render_template('analysis.html', 
                                      error=f"Error generating analysis: {str(e)}",
-                                     is_logged_in=True)
+                                     is_logged_in=True,
+                                     selected_range=range_option)
         else:
             return render_template('analysis.html', 
                                  error="Database connection failed. Check MySQL configuration.",
-                                 is_logged_in=True)
+                                 is_logged_in=True,
+                                 selected_range=range_option)
     except Exception as e:
         print(f"Critical error in analysis route: {e}")
         import traceback
@@ -295,18 +352,25 @@ def analysis():
 @login_required
 def download_report():
     """Download all predictions as CSV report"""
+    username = session.get('username')
+    if not username:
+        return redirect(url_for('login_page'))
     connection = get_db_connection()
     
     if connection:
         try:
-            # Query predictions data for the current user only
-            username = session.get('username')
-            query = "SELECT id, filename, predicted_class, confidence, prediction_timestamp, image_path FROM predictions WHERE username = %s ORDER BY prediction_timestamp DESC"
+            # Query all predictions data
+            query = """
+                SELECT id, filename, predicted_class, confidence, prediction_timestamp, image_path
+                FROM predictions
+                WHERE username = %s
+                ORDER BY prediction_timestamp DESC
+            """
             df = pd.read_sql(query, connection, params=(username,))
             connection.close()
             
             if df.empty:
-                return "No prediction data available to download.", 404
+                return "No prediction data available to download for this user.", 404
             
             # Create CSV in memory
             csv_buffer = io.StringIO()
@@ -339,6 +403,9 @@ def download_report():
 def result():
     if request.method == 'POST':
         f = request.files['image']
+        username = session.get('username')
+        if not username:
+            return redirect(url_for('login_page'))
         
         basepath = os.path.dirname(__file__)
         upload_folder = os.path.join(basepath, 'uploads')
@@ -360,8 +427,7 @@ def result():
         predicted_class = class_names[class_index]
         confidence = predictions[0][class_index]
         
-        # Save prediction to MySQL database with username
-        username = session.get('username')
+        # Save prediction to MySQL database
         save_prediction_to_db(
             filename=f.filename,
             predicted_class=predicted_class,
