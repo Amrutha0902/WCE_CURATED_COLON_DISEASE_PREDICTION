@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Analysis Dashboard - ColonPredict</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        :root {
+            /* PRIMARY COLOR SYSTEM */
+            --primary-blue: #1E40AF;
+            
+            /* NEUTRAL SYSTEM */
+            --white: #FFFFFF;
+            --light-gray: #F3F4F6;
+            --border-gray: #E5E7EB;
+            --text-dark: #111827;
+            --text-muted: #6B7280;
+            
+            /* SHADOWS */
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px 0 rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            background: var(--white);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        .dashboard-wrapper {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            background: var(--white);
+        }
+
+        .dashboard-content {
+            flex: 1;
+            padding: 40px 20px;
+            background: var(--white);
+        }
+
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .dashboard-header {
+            margin-bottom: 40px;
+        }
+
+        .dashboard-header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 8px;
+        }
+
+        .dashboard-header p {
+            font-size: 1rem;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        /* ERROR MESSAGE */
+        .error-message {
+            background: var(--light-gray);
+            border: 1px solid var(--border-gray);
+            border-left: 4px solid var(--primary-blue);
+            padding: 16px 20px;
+            border-radius: 6px;
+            color: var(--text-dark);
+            margin-bottom: 32px;
+        }
+
+        /* STATS GRID */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: var(--white);
+            border: 1px solid var(--border-gray);
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
+        }
+
+        .stat-card:hover {
+            box-shadow: var(--shadow-md);
+            border-color: var(--primary-blue);
+        }
+
+        .stat-card h3 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .stat-card .value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary-blue);
+            line-height: 1;
+        }
+
+        /* CHART SECTION */
+        .chart-section {
+            background: var(--white);
+            border: 1px solid var(--border-gray);
+            border-radius: 8px;
+            padding: 32px;
+            margin-bottom: 32px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .chart-section h2 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 8px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--primary-blue);
+            display: inline-block;
+        }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-top: 24px;
+        }
+
+        .chart-container {
+            background: var(--white);
+            border: 1px solid var(--border-gray);
+            border-radius: 6px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 300px;
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* CLASS DETAILS TABLE */
+        .class-details {
+            background: var(--white);
+            border: 1px solid var(--border-gray);
+            border-radius: 8px;
+            padding: 32px;
+            margin-bottom: 32px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .class-details h2 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--primary-blue);
+            display: inline-block;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 6px;
+            border: 1px solid var(--border-gray);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: var(--primary-blue);
+            color: var(--white);
+            padding: 14px 16px;
+            text-align: left;
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border-gray);
+            color: var(--text-dark);
+            font-size: 0.95rem;
+        }
+
+        tbody tr:hover {
+            background: var(--light-gray);
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* STATUS BADGE */
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            border: 1px solid var(--primary-blue);
+            color: var(--primary-blue);
+            background: var(--white);
+            text-align: center;
+            min-width: 100px;
+        }
+
+        /* DOWNLOAD SECTION */
+        .download-section {
+            background: var(--white);
+            border: 1px solid var(--border-gray);
+            border-radius: 8px;
+            padding: 32px;
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .download-section h3 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 8px;
+        }
+
+        .download-section p {
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            font-size: 0.95rem;
+        }
+
+        .btn-primary {
+            display: inline-block;
+            background: var(--primary-blue);
+            color: var(--white);
+            padding: 12px 28px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn-primary:hover {
+            background: #1e3a8a;
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            display: inline-block;
+            background: var(--white);
+            color: var(--primary-blue);
+            padding: 12px 28px;
+            border: 1px solid var(--primary-blue);
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary:hover {
+            background: var(--light-gray);
+            border-color: #1e3a8a;
+        }
+
+        .range-chip {
+            padding: 10px 14px;
+            border: 1px solid var(--border-gray);
+            border-radius: 20px;
+            color: var(--text-dark);
+            text-decoration: none;
+            font-weight: 600;
+            background: var(--white);
+            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
+        }
+
+        .range-chip:hover {
+            border-color: var(--primary-blue);
+            color: var(--primary-blue);
+            box-shadow: var(--shadow-md);
+        }
+
+        .selected-range {
+            border-color: var(--primary-blue);
+            background: #EEF2FF;
+            color: var(--primary-blue);
+            box-shadow: var(--shadow-md);
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 768px) {
+            .dashboard-content {
+                padding: 20px 16px;
+            }
+
+            .dashboard-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+
+            th, td {
+                padding: 12px 8px;
+                font-size: 0.85rem;
+            }
+
+            .download-section {
+                padding: 24px;
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <div class="dashboard-wrapper">
+        <nav>
+            <div class="logo">ColonPredict</div>
+            <div class="nav-items">
+                <a href="{{ url_for('index') }}">Home</a>
+                <a href="{{ url_for('about') }}">About</a>
+                <a href="{{ url_for('predict') }}">Predictions</a>
+                <a href="{{ url_for('analysis') }}">Analysis</a>
+                <a href="{{ url_for('contact') }}">Contact</a>
+                <a href="{{ url_for('logout') }}">Logout</a>
+            </div>
+        </nav>
+
+        <div class="dashboard-content">
+            <div class="dashboard-container">
+                <!-- Dashboard Header -->
+                <div class="dashboard-header">
+                    <h1>Data Analysis Dashboard</h1>
+                    <p>Comprehensive analytics and insights for colon disease predictions</p>
+                </div>
+
+                <!-- Range Filters -->
+                <div style="margin-bottom: 24px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+                    {% set ranges = [
+                        ('today', 'Today'),
+                        ('week', 'Week'),
+                        ('month', 'Month'),
+                        ('six_months', '6 Months'),
+                        ('year', 'Year'),
+                        ('till_date', 'Till Date')
+                    ] %}
+                    {% for value, label in ranges %}
+                        {% set active = 'selected-range' if selected_range == value else '' %}
+                        <a href="{{ url_for('analysis', range=value) }}" class="range-chip {{ active }}">{{ label }}</a>
+                    {% endfor %}
+                </div>
+
+                {% if error %}
+                    <div class="error-message">
+                        {{ error }}
+                    </div>
+                {% else %}
+                    <!-- Statistics Cards -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>Total Predictions</h3>
+                            <div class="value">{{ stats.total_predictions }}</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Disease Classes</h3>
+                            <div class="value">{{ stats.class_distribution|length }}</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Most Common Disease</h3>
+                            <div class="value" style="font-size: 1.8rem; word-wrap: break-word;">
+                                {% set max_class = stats.class_distribution|dictsort(by='value', reverse=True)|first %}
+                                {{ max_class[0] if max_class else 'N/A' }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts Section -->
+                    <div class="chart-section">
+                        <h2>Prediction Analytics</h2>
+                        <div class="chart-grid">
+                            <div class="chart-container">
+                                <canvas id="classDistributionChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="confidenceChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Statistics Table -->
+                    <div class="class-details">
+                        <h2>Detailed Statistics</h2>
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Disease Class</th>
+                                        <th>Predictions</th>
+                                        <th>Percentage</th>
+                                        <th>Avg Confidence</th>
+                                        <th>Confidence Level</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for class_name, count in stats.class_distribution.items() %}
+                                    <tr>
+                                        <td>{{ class_name }}</td>
+                                        <td>{{ count }}</td>
+                                        <td>{{ "%.1f"|format((count / stats.total_predictions) * 100) }}%</td>
+                                        <td>{{ stats.avg_confidence[class_name] }}</td>
+                                        <td>
+                                            {% set conf = stats.avg_confidence[class_name]|float %}
+                                            {% if conf >= 0.8 %}
+                                                <span class="status-badge">High</span>
+                                            {% elif conf >= 0.6 %}
+                                                <span class="status-badge">Medium</span>
+                                            {% else %}
+                                                <span class="status-badge">Low</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Download Section -->
+                    <div class="download-section">
+                        <h3>Export Data</h3>
+                        <p>Download complete prediction history as a CSV report for further analysis</p>
+                        <a href="{{ url_for('download_report') }}" class="btn-primary">Download CSV Report</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    <script>
+        {% if stats and stats.chart_data %}
+        const chartData = {{ stats.chart_data|safe }};
+        
+        // Monochrome blue palette - primary blue only
+        const primaryBlueShades = [
+            'rgba(30, 64, 175, 0.9)',      // Primary Blue
+            'rgba(37, 99, 235, 0.9)',      // Lighter Blue
+            'rgba(59, 130, 246, 0.9)',     // Light Blue
+            'rgba(96, 165, 250, 0.9)',     // Even Lighter
+            'rgba(147, 197, 253, 0.9)'     // Pale Blue
+        ];
+        
+        // Chart 1: Class Distribution (Bar Chart)
+        const ctx1 = document.getElementById('classDistributionChart').getContext('2d');
+        new Chart(ctx1, {
+            type: 'bar',
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    label: 'Prediction Count',
+                    data: chartData.counts,
+                    backgroundColor: primaryBlueShades,
+                    borderColor: 'rgba(30, 64, 175, 1)',
+                    borderWidth: 0,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                indexAxis: 'y',
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Predictions by Disease Class',
+                        font: { size: 14, weight: 'bold', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto' },
+                        padding: 20,
+                        color: '#111827'
+                    },
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(30, 64, 175, 0.9)',
+                        padding: 12,
+                        titleFont: { size: 13, weight: 'bold' },
+                        bodyFont: { size: 12 },
+                        cornerRadius: 4,
+                        displayColors: false
+                    }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grid: {
+                            color: '#F3F4F6',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#6B7280',
+                            font: { size: 12 }
+                        }
+                    },
+                    y: {
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#6B7280',
+                            font: { size: 12 }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Chart 2: Average Confidence (Bar Chart)
+        const ctx2 = document.getElementById('confidenceChart').getContext('2d');
+        new Chart(ctx2, {
+            type: 'bar',
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    label: 'Average Confidence',
+                    data: chartData.avg_confidence,
+                    backgroundColor: primaryBlueShades,
+                    borderColor: 'rgba(30, 64, 175, 1)',
+                    borderWidth: 0,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                indexAxis: 'y',
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Average Confidence by Class',
+                        font: { size: 14, weight: 'bold', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto' },
+                        padding: 20,
+                        color: '#111827'
+                    },
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(30, 64, 175, 0.9)',
+                        padding: 12,
+                        titleFont: { size: 13, weight: 'bold' },
+                        bodyFont: { size: 12 },
+                        cornerRadius: 4,
+                        displayColors: false,
+                        callbacks: {
+                            label: function(context) {
+                                return (context.parsed.x * 100).toFixed(1) + '%';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        max: 1.0,
+                        grid: {
+                            color: '#F3F4F6',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#6B7280',
+                            font: { size: 12 },
+                            callback: function(value) {
+                                return (value * 100).toFixed(0) + '%';
+                            }
+                        }
+                    },
+                    y: {
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#6B7280',
+                            font: { size: 12 }
+                        }
+                    }
+                }
+            }
+        });
+        {% endif %}
+    </script>
+</body>
+</html>
