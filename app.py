@@ -19,6 +19,8 @@ from mysql.connector import Error
 from datetime import datetime, timedelta
 import pandas as pd
 from functools import wraps
+import hashlib
+import hmac
 import io
 import json
 import uuid
@@ -29,6 +31,11 @@ from PIL import Image, UnidentifiedImageError
 from PIL import Image as PillowImage
 
 app = Flask(__name__)
+if os.getenv('WCE_PRODUCTION', 'false').lower() == 'true':
+    if os.getenv('RATELIMIT_STORAGE_URI', 'memory://').startswith('memory://'):
+        raise RuntimeError('Production requires persistent RATELIMIT_STORAGE_URI')
+    if os.getenv('COOKIE_SECURE', 'true').lower() != 'true':
+        raise RuntimeError('Production requires secure session cookies')
 CSRFProtect(app)
 limiter = Limiter(
     get_remote_address,
@@ -105,11 +112,37 @@ def save_prediction_to_db(filename, predicted_class, confidence, image_path, use
     return False
 
 # Authentication Decorator
+def account_session_fingerprint(username):
+    """Bind a login session to the current doctor password hash (reset revokes sessions)."""
+    connection = get_db_connection()
+    if connection is None:
+        return None
+    cursor = None
+    try:
+        cursor = connection.cursor()
+        cursor.execute('SELECT password FROM users WHERE username = %s AND role = %s', (username, 'doctor'))
+        row = cursor.fetchone()
+        if not row or not row[0]:
+            return None
+        return hmac.new(app.secret_key.encode('utf-8'), row[0].encode('utf-8'), hashlib.sha256).hexdigest()
+    except (Error, ValueError, TypeError):
+        app.logger.warning('Account session validation failed')
+        return None
+    finally:
+        if cursor is not None:
+            cursor.close()
+        connection.close()
+
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if session.get('logged_in') is not True or not session.get('username'):
             return render_template('auth_required.html', redirect_page=f.__name__)
+        expected = account_session_fingerprint(session['username'])
+        if not expected or not hmac.compare_digest(session.get('account_fingerprint', ''), expected):
+            session.clear()
+            return render_template('auth_required.html', redirect_page=f.__name__), 401
         return f(*args, **kwargs)
     return decorated_function
 
@@ -256,7 +289,11 @@ def login_home():
     error = None
     
     if verify_doctor_credentials(username, password):
+        fingerprint = account_session_fingerprint(username)
+        if not fingerprint:
+            return render_template('index.html', error_login='Authentication temporarily unavailable', is_logged_in=False), 503
         session.clear()
+        session['account_fingerprint'] = fingerprint
         session.permanent = True
         session['logged_in'] = True
         session['username'] = username
@@ -274,7 +311,7 @@ def login():
     """Legacy Login Route (redirects to home)"""
     return redirect(url_for('index'))
 
-@app.route('/logout')
+@app.route('/logout', methods=['POST'])
 def logout():
     """Logout Route"""
     session.clear()
@@ -288,6 +325,10 @@ def about():
 def predict():
     is_logged_in = 'logged_in' in session
     if not is_logged_in or not session.get('username'):
+        return redirect(url_for('login_page'))
+    expected = account_session_fingerprint(session['username'])
+    if not expected or not hmac.compare_digest(session.get('account_fingerprint', ''), expected):
+        session.clear()
         return redirect(url_for('login_page'))
     return render_template('details.html', is_logged_in=True)
 
