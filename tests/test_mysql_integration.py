@@ -29,7 +29,7 @@ def integration_app():
 
     # Stub expensive ML modules only. mysql.connector remains fully real.
     model_module = types.ModuleType("keras.models")
-    model_module.load_model = lambda path: object()
+    model_module.load_model = lambda path, **kwargs: object()
     preprocessing_image = types.ModuleType("keras.preprocessing.image")
     preprocessing_image.load_img = lambda *args, **kw: None
     preprocessing_image.img_to_array = lambda *args, **kw: None
