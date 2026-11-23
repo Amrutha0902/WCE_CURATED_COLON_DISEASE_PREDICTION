@@ -1,6 +1,7 @@
 # Compatibility ranges only; full runtime has not yet been validated.
 Flask>=3.0,<4
 Flask-WTF>=1.2,<2
+Flask-Limiter>=3.8,<5
 Werkzeug>=3.0,<4
 mysql-connector-python>=9.0,<10
 keras>=3.0,<4
