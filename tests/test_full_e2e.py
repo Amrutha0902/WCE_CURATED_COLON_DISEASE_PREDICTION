@@ -29,6 +29,7 @@ def test_real_model_http_to_mysql_roundtrip():
     assert os.getenv("DB_NAME") == "colon_disease_db_test", "Refusing non-test database"
     os.environ.setdefault("FLASK_SECRET_KEY", "ci-only-throwaway-signing-key-123456789")
     os.environ.setdefault("COOKIE_SECURE", "false")
+    os.environ["WCE_ALLOW_SELF_SIGNUP"] = "true"
     import app as application
 
     application.app.config.update(TESTING=True)
