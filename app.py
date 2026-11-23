@@ -94,7 +94,7 @@ def save_prediction_to_db(filename, predicted_class, confidence, image_path, use
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'logged_in' not in session:
+        if session.get('logged_in') is not True or not session.get('username'):
             return render_template('auth_required.html', redirect_page=f.__name__)
         return f(*args, **kwargs)
     return decorated_function
@@ -272,7 +272,9 @@ def about():
 @app.route('/predict')
 def predict():
     is_logged_in = 'logged_in' in session
-    return render_template('details.html', is_logged_in=is_logged_in)
+    if not is_logged_in or not session.get('username'):
+        return redirect(url_for('login_page'))
+    return render_template('details.html', is_logged_in=True)
 
 @app.route('/contact')
 def contact():
@@ -313,8 +315,10 @@ def analysis():
                     base_query += " AND prediction_timestamp >= %s"
                     params.append(start_date)
                 query = base_query + " ORDER BY prediction_timestamp DESC"
-                df = pd.read_sql(query, connection, params=tuple(params))
-                connection.close()
+                try:
+                    df = pd.read_sql(query, connection, params=tuple(params))
+                finally:
+                    connection.close()
                 
                 if df.empty:
                     return render_template('analysis.html', 
@@ -353,11 +357,9 @@ def analysis():
                 return render_template('analysis.html', stats=stats, is_logged_in=True, selected_range=range_option)
                 
             except Exception as e:
-                print(f"Analysis error: {e}")
-                import traceback
-                traceback.print_exc()
+                app.logger.exception('Analysis query or rendering failed')
                 return render_template('analysis.html', 
-                                     error=f"Error generating analysis: {str(e)}",
+                                     error='Analysis temporarily unavailable. Please try again later.',
                                      is_logged_in=True,
                                      selected_range=range_option)
         else:
@@ -366,10 +368,8 @@ def analysis():
                                  is_logged_in=True,
                                  selected_range=range_option)
     except Exception as e:
-        print(f"Critical error in analysis route: {e}")
-        import traceback
-        traceback.print_exc()
-        return f"Error: {str(e)}", 500
+        app.logger.exception('Analysis request failed')
+        return 'Analysis temporarily unavailable', 500
 
 @app.route('/download-report')
 @login_required
@@ -384,13 +384,15 @@ def download_report():
         try:
             # Query all predictions data
             query = """
-                SELECT id, filename, predicted_class, confidence, prediction_timestamp, image_path
+                SELECT id, predicted_class, confidence, prediction_timestamp
                 FROM predictions
                 WHERE username = %s
                 ORDER BY prediction_timestamp DESC
             """
-            df = pd.read_sql(query, connection, params=(username,))
-            connection.close()
+            try:
+                df = pd.read_sql(query, connection, params=(username,))
+            finally:
+                connection.close()
             
             if df.empty:
                 return "No prediction data available to download for this user.", 404
@@ -416,8 +418,9 @@ def download_report():
                 download_name=filename
             )
             
-        except Error as e:
-            return f"Database error: {e}", 500
+        except Exception:
+            app.logger.exception('Report generation failed')
+            return 'Report temporarily unavailable', 500
     else:
         return "Database connection failed", 500
 
