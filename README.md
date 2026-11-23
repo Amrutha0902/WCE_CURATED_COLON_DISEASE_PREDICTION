@@ -524,3 +524,24 @@ The users table supports password hashes. Legacy plaintext accounts must use a t
 Run `python -m pytest -q tests/test_security_contract.py tests/test_flask_security.py` for isolated checks; the MySQL integration suite requires a **disposable** database named `colon_disease_db_test` and `WCE_MYSQL_TEST=1`. Do not run it on production records.
 
 CI success confirms the tested code path only. The remaining medical model quality, role authorization and deployment risks in `SECURITY.md` remain open.
+
+
+## Reproducible local demonstration (not clinical use)
+
+A Dockerfile and Compose configuration are available on the security branch. From a trusted local checkout, export strong unique values for `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`, and `FLASK_SECRET_KEY`; then run `docker compose up --build`. Visit `http://127.0.0.1:8000`. This binds the demo to localhost and deliberately disables HTTPS-only cookies **for local HTTP only**. Do not expose the Compose stack to the public Internet. Docker image build and Compose startup have not yet been verified in CI. Use a fresh disposable database: MySQL init scripts do not automatically migrate existing persistent volumes.
+
+`GET /healthz` returns a non-sensitive liveness response, but does not prove the database or model is healthy.
+
+## Real model evaluation
+
+`scripts/evaluate_vgg.py` accepts an **independent, labeled** CSV manifest with `image_path,label,patient_id`, and an image root. Example:
+
+```bash
+python scripts/evaluate_vgg.py --manifest /private/test_manifest.csv --image-root /private/wce-test-images --output evaluation_report.json
+```
+
+The evaluation tool produces a confusion matrix, class-wise precision/recall/F1, macro-F1 and accuracy. No metrics are asserted until the actual independent test images are provided and evaluated. Verify class ordering from training notebooks, confirm patient IDs do not overlap with training/validation, and ensure data licensing and consent before running or publishing results. Do not commit medical images, patient IDs, or private evaluation reports.
+
+## Real end-to-end CI
+
+The `full-e2e` job exercises signup, login, synthetic image upload, actual saved VGG inference, MySQL persistence and the authenticated analysis route against a disposable MySQL 8 instance. This verifies an engineering workflow, **not clinical accuracy**. CI status must be checked before claiming the job passed.
