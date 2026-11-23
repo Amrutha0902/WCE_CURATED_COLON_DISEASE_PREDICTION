@@ -12,16 +12,25 @@ import pandas as pd
 from functools import wraps
 import io
 import json
+import uuid
+from pathlib import Path
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from PIL import Image, UnidentifiedImageError
 
 app = Flask(__name__)
-app.secret_key = 'REDACTED_HISTORICAL_FLASK_SECRET'  # Change in production
+app.secret_key = os.environ.get('FLASK_SECRET_KEY')
+if not app.secret_key:
+    raise RuntimeError('FLASK_SECRET_KEY must be set to a strong random value')
+app.config.update(MAX_CONTENT_LENGTH=8 * 1024 * 1024, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax', SESSION_COOKIE_SECURE=os.getenv('COOKIE_SECURE', 'true').lower() == 'true')
 
 # MySQL Database Configuration
 DB_CONFIG = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'REDACTED_HISTORICAL_DB_PASSWORD',
-    'database': 'colon_disease_db'
+    'host': os.environ.get('DB_HOST', 'localhost'),
+    'user': os.environ.get('DB_USER', 'colon_app'),
+    'password': os.environ.get('DB_PASSWORD', ''),
+    'database': os.environ.get('DB_NAME', 'colon_disease_db')
+
 }
 
 # Load your model
@@ -105,21 +114,35 @@ def login_required(f):
 
 # Verify Doctor Credentials
 def verify_doctor_credentials(username, password):
-    """Verify doctor login credentials against MySQL database"""
+    """Verify only password-hashed doctor accounts; legacy plaintext accounts must reset."""
+    if not username or not password:
+        return False
     connection = get_db_connection()
-    if connection:
-        try:
-            cursor = connection.cursor()
-            query = "SELECT * FROM users WHERE username = %s AND password = %s AND role = 'doctor'"
-            cursor.execute(query, (username, password))
-            user = cursor.fetchone()
-            cursor.close()
-            connection.close()
-            return user is not None
-        except Error as e:
-            print(f"Authentication error: {e}")
+    if connection is None:
+        return False
+    cursor = None
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT password FROM users WHERE username = %s AND role = %s",
+            (username, 'doctor'),
+        )
+        user = cursor.fetchone()
+        if not user:
             return False
-    return False
+        stored_hash = user[0]
+        if not stored_hash or not (
+            stored_hash.startswith('scrypt:') or stored_hash.startswith('pbkdf2:')
+        ):
+            return False
+        return check_password_hash(stored_hash, password)
+    except (Error, ValueError) as exc:
+        app.logger.warning("Doctor authentication failed: %s", type(exc).__name__)
+        return False
+    finally:
+        if cursor is not None:
+            cursor.close()
+        connection.close()
 
 # Check if user exists
 def user_exists(username):
@@ -148,7 +171,7 @@ def register_user(username, password, email=None, role='doctor'):
             cursor = connection.cursor()
             # Insert only the available columns to match existing schema
             query = "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)"
-            cursor.execute(query, (username, password, role))
+            cursor.execute(query, (username, generate_password_hash(password), 'doctor'))
             connection.commit()
             cursor.close()
             connection.close()
@@ -187,11 +210,14 @@ def signup():
                              error_signup="Passwords do not match",
                              is_logged_in=False)
     
-    if len(password) < 6:
+    if len(password) < 12:
         return render_template('index.html', 
-                             error_signup="Password must be at least 6 characters",
+                             error_signup="Password must be at least 12 characters",
                              is_logged_in=False)
     
+    if len(username) > 50 or not username.replace('_', '').isalnum():
+        return render_template('index.html', error_signup='Use a valid username (letters, numbers, underscores; max 50)', is_logged_in=False)
+
     if user_exists(username):
         return render_template('index.html', 
                              error_signup="Username already exists",
@@ -220,6 +246,7 @@ def login_home():
     error = None
     
     if verify_doctor_credentials(username, password):
+        session.clear()
         session['logged_in'] = True
         session['username'] = username
         return render_template('index.html', 
@@ -402,18 +429,29 @@ def download_report():
 @login_required
 def result():
     if request.method == 'POST':
-        f = request.files['image']
+        f = request.files.get('image')
+        if not f or not f.filename:
+            return 'Image upload is required', 400
+        original_name = secure_filename(f.filename)
+        if Path(original_name).suffix.lower() not in {'.jpg', '.jpeg', '.png'}:
+            return 'Only JPG and PNG images are supported', 400
         username = session.get('username')
         if not username:
             return redirect(url_for('login_page'))
-        
-        basepath = os.path.dirname(__file__)
-        upload_folder = os.path.join(basepath, 'uploads')
+
+        upload_folder = os.path.join(os.path.dirname(__file__), 'uploads')
         os.makedirs(upload_folder, exist_ok=True)
-        
-        filepath = os.path.join(upload_folder, f.filename)
-        f.save(filepath)
-        
+        filename = f"{uuid.uuid4().hex}{Path(original_name).suffix.lower()}"
+        filepath = os.path.join(upload_folder, filename)
+        try:
+            f.save(filepath)
+            with Image.open(filepath) as uploaded_image:
+                uploaded_image.verify()
+        except (OSError, UnidentifiedImageError, ValueError):
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return 'Invalid image file', 400
+
         # Read and preprocess the image
         img = load_img(filepath, target_size=(224, 224))
         x = img_to_array(img)
@@ -429,7 +467,7 @@ def result():
         
         # Save prediction to MySQL database
         save_prediction_to_db(
-            filename=f.filename,
+            filename=original_name,
             predicted_class=predicted_class,
             confidence=confidence,
             image_path=filepath,
@@ -450,4 +488,4 @@ if __name__ == '__main__':
     print("========================\n")
     
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)  # Disable reloader to prevent crashes
+    app.run(host='127.0.0.1', port=port, debug=False, use_reloader=False)  # Development only
