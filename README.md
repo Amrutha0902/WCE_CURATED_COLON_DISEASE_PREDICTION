@@ -477,3 +477,35 @@ Click "Download CSV Report"
 
 **Last Updated:** January 2026  
 **Status:** Production Ready ✓
+
+
+---
+
+## Security hardening branch: important status
+
+> **Do not use for diagnosis or production patient care.** No clinical validation or complete deployment verification has been performed. Existing README descriptions of "enterprise" features and performance should be treated as project claims, not independently verified production capabilities.
+
+The `security/wce-hardening-2026` branch makes initial security improvements:
+- Flask signing secret and MySQL credentials are read from environment variables.
+- New doctor passwords are stored as salted Werkzeug hashes, and only hashed-password doctor accounts can log in.
+- Existing plaintext accounts must be reset or re-provisioned securely; they cannot log in with legacy plaintext credentials.
+- Default doctor credentials have been removed from `setup_database.sql`.
+- Upload filenames are generated server-side and image formats undergo basic validation; uploads are limited to 8 MiB.
+- CSRF tokens are required on browser POST forms.
+- `.github/workflows/security-checks.yml` performs source-level regression checks.
+
+### Local configuration
+
+1. Use a supported Python environment (the dependency ranges in `requirements.txt` have not yet been validated as a complete lockfile).
+2. Run `python -m pip install -r requirements.txt`.
+3. Create `.env` from `.env.example`; **environment files are not loaded automatically**. Export the variables into the shell or configure them in your development environment before running Flask.
+4. Generate a unique `FLASK_SECRET_KEY` using Python `secrets.token_urlsafe(48)`. Set `DB_USER`, `DB_PASSWORD`, `DB_NAME` for an appropriately restricted MySQL user.
+5. Run `setup_database.sql` for a new development database. It deliberately creates no initial user; sign up in the application.
+6. Ensure `model_1/Vgg.h5` is present. Run `python app.py`.
+7. For local HTTP development only, set `COOKIE_SECURE=false` to allow browser login. Keep it `true` when using HTTPS.
+
+### Data migrations and limitations
+
+The users table supports password hashes. Legacy plaintext accounts must use a trusted password reset/re-provisioning process; credentials must never be logged or exported. Existing installations need a reviewed schema migration if `predictions.username` is missing; `setup_database.sql` defines the column for **fresh** databases only. The application also has legacy runtime schema-alter behavior that should be replaced with explicit migrations.
+
+**Not yet verified:** real MySQL integration, model inference and model accuracy, dependency compatibility on a fresh machine, login rate limiting, complete upload threat-model testing, production deployment, and end-to-end tests. Review `SECURITY.md` before any public deployment. Previously exposed keys/passwords must be **rotated outside GitHub**.
