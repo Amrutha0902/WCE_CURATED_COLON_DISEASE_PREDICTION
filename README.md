@@ -492,6 +492,7 @@ The `security/wce-hardening-2026` branch makes initial security improvements:
 - Default doctor credentials have been removed from `setup_database.sql`.
 - Upload filenames are generated server-side and image formats undergo basic validation; uploads are limited to 8 MiB.
 - CSRF tokens are required on browser POST forms.
+- Login requests are limited to 5 per minute per remote address (in-memory development default).
 - `.github/workflows/security-checks.yml` performs source-level regression checks.
 
 ### Local configuration
@@ -506,6 +507,6 @@ The `security/wce-hardening-2026` branch makes initial security improvements:
 
 ### Data migrations and limitations
 
-The users table supports password hashes. Legacy plaintext accounts must use a trusted password reset/re-provisioning process; credentials must never be logged or exported. Existing installations need a reviewed schema migration if `predictions.username` is missing; `setup_database.sql` defines the column for **fresh** databases only. The application also has legacy runtime schema-alter behavior that should be replaced with explicit migrations.
+The users table supports password hashes. Legacy plaintext accounts must use a trusted password reset/re-provisioning process; credentials must never be logged or exported. Existing installations need a reviewed schema migration if `predictions.username` is missing; `setup_database.sql` defines the column for **fresh** databases only. The application no longer alters schema during prediction requests. For older databases, review, back up, and apply `migrations/001_predictions_username.sql`.
 
-**Not yet verified:** real MySQL integration, model inference and model accuracy, dependency compatibility on a fresh machine, login rate limiting, complete upload threat-model testing, production deployment, and end-to-end tests. Review `SECURITY.md` before any public deployment. Previously exposed keys/passwords must be **rotated outside GitHub**.
+**Verified with substitutes:** Flask request-level tests of login hashing, legacy-login rejection, CSRF, login rate limiting, and invalid uploads. **Not yet verified:** real MySQL integration, model inference and model accuracy, full dependency compatibility on a fresh machine, distributed rate limiting, complete upload threat-model testing, production deployment, and full end-to-end tests. Review `SECURITY.md` before any public deployment. Previously exposed keys/passwords must be **rotated outside GitHub**.
