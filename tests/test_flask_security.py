@@ -237,6 +237,7 @@ def test_analysis_exception_does_not_disclose_internal_details(application, monk
         with client.session_transaction() as sess:
             sess["logged_in"] = True
             sess["username"] = "test-doctor"
+            sess["account_fingerprint"] = "test-fingerprint"
         response = client.get("/analysis")
         assert response.status_code == 200
         assert b"private-db-host-and-secret" not in response.data
@@ -255,6 +256,7 @@ def test_report_exception_does_not_disclose_internal_details(application, monkey
         with client.session_transaction() as sess:
             sess["logged_in"] = True
             sess["username"] = "test-doctor"
+            sess["account_fingerprint"] = "test-fingerprint"
         response = client.get("/download-report")
         assert response.status_code == 500
         assert b"private-db-host-and-secret" not in response.data
@@ -277,6 +279,7 @@ def test_report_excludes_uploaded_image_identifiers_from_query(application, monk
         with client.session_transaction() as sess:
             sess["logged_in"] = True
             sess["username"] = "test-doctor"
+            sess["account_fingerprint"] = "test-fingerprint"
         response = client.get("/download-report")
         assert response.status_code == 404
     assert captured
