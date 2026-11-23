@@ -12,7 +12,7 @@ Before enabling this app publicly, implement a verified account recovery/reset w
 
 ## Application security limitations
 
-- This branch does not provide CSRF protection or rate limiting yet; do not expose it publicly until these are implemented and verified.
+- CSRF tokens are required for browser POST forms, but the full protection has not been tested against a running app. Login rate limiting is not implemented; do not expose it publicly until rate limiting and full security integration tests are verified.
 - New browser sessions are marked Secure by default; for localhost HTTP-only development, set COOKIE_SECURE=false.
 - Medical uploads and predictions may be sensitive. Configure retention/access policies and avoid logging private details.
 - Upload validation checks image type and size, but a dedicated image processing sandbox, malware checks, and content security controls may be needed for production.
