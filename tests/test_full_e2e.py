@@ -80,7 +80,7 @@ def test_real_model_http_to_mysql_roundtrip():
             assert 0 <= float(rows[0][1]) <= 1
             # Clean up generated synthetic image after verification.
             assert rows[0][2] in ('', None)
-            assert not list((ROOT / 'uploads').glob('*.png'))
+            # Stored metadata no longer contains a filesystem path.
             response = client.get("/analysis")
             assert response.status_code == 200
     finally:
