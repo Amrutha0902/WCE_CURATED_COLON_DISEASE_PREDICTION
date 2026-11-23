@@ -26,6 +26,7 @@ from pathlib import Path
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from PIL import Image, UnidentifiedImageError
+from PIL import Image as PillowImage
 
 app = Flask(__name__)
 CSRFProtect(app)
@@ -38,7 +39,20 @@ limiter = Limiter(
 app.secret_key = os.environ.get('FLASK_SECRET_KEY')
 if not app.secret_key:
     raise RuntimeError('FLASK_SECRET_KEY must be set to a strong random value')
-app.config.update(MAX_CONTENT_LENGTH=8 * 1024 * 1024, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax', SESSION_COOKIE_SECURE=os.getenv('COOKIE_SECURE', 'true').lower() == 'true')
+app.config.update(MAX_CONTENT_LENGTH=8 * 1024 * 1024, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax', SESSION_COOKIE_SECURE=os.getenv('COOKIE_SECURE', 'true').lower() == 'true', PERMANENT_SESSION_LIFETIME=timedelta(hours=8))
+
+MAX_IMAGE_PIXELS = 20_000_000
+PillowImage.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('Referrer-Policy', 'no-referrer')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Cache-Control', 'no-store')
+    if app.config['SESSION_COOKIE_SECURE'] and request.is_secure:
+        response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000')
+    return response
 
 # MySQL Database Configuration
 DB_CONFIG = {
@@ -62,7 +76,7 @@ def get_db_connection():
         if connection.is_connected():
             return connection
     except Error as e:
-        print(f"Database connection error: {e}")
+        app.logger.error('Database connection failed: %s', type(e).__name__)
         return None
 
 # Save Prediction to Database
@@ -85,7 +99,7 @@ def save_prediction_to_db(filename, predicted_class, confidence, image_path, use
             return True
         except Error as e:
             # Fallback: if username column truly missing or insert fails, log and skip insert to avoid silent data issues
-            print(f"Database insert error: {e}")
+            app.logger.error('Database insert failed: %s', type(e).__name__)
             connection.close()
             return False
     return False
@@ -145,7 +159,7 @@ def user_exists(username):
             connection.close()
             return user is not None
         except Error as e:
-            print(f"Database error: {e}")
+            app.logger.error('Database query failed: %s', type(e).__name__)
             return False
     return False
 
@@ -164,7 +178,7 @@ def register_user(username, password, email=None, role='doctor'):
             connection.close()
             return True
         except Error as e:
-            print(f"Registration error: {e}")
+            app.logger.error('Registration failed: %s', type(e).__name__)
             return False
     return False
 
@@ -243,6 +257,7 @@ def login_home():
     
     if verify_doctor_credentials(username, password):
         session.clear()
+        session.permanent = True
         session['logged_in'] = True
         session['username'] = username
         return render_template('index.html', 
@@ -445,8 +460,12 @@ def result():
         try:
             f.save(filepath)
             with Image.open(filepath) as uploaded_image:
+                if uploaded_image.format not in {'JPEG', 'PNG'}:
+                    raise ValueError('Unsupported image encoding')
+                if uploaded_image.width * uploaded_image.height > MAX_IMAGE_PIXELS:
+                    raise ValueError('Image dimensions exceed safe limit')
                 uploaded_image.verify()
-        except (OSError, UnidentifiedImageError, ValueError):
+        except (OSError, UnidentifiedImageError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
             if os.path.exists(filepath):
                 os.remove(filepath)
             return 'Invalid image file', 400
@@ -482,7 +501,11 @@ def result():
             return 'Prediction could not be saved', 503
         
         result_text = f"Prediction: {predicted_class} with confidence {confidence:.2f}"
-        
+        # Keep prediction metadata but never retain the medical image on disk.
+        try:
+            os.remove(filepath)
+        except OSError:
+            app.logger.warning('Unable to delete processed upload')
         return render_template('result.html', result=result_text, is_logged_in=True)
     
     return redirect(url_for('predict'))
