@@ -1,0 +1,36 @@
+# Local demonstration only; do not use real patient data.
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: colon_disease_db
+      MYSQL_USER: colon_app
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in your local environment}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD locally}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./setup_database.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u$$MYSQL_USER -p$$MYSQL_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+  web:
+    build: .
+    environment:
+      DB_HOST: mysql
+      DB_USER: colon_app
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD locally}
+      DB_NAME: colon_disease_db
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?Set FLASK_SECRET_KEY locally}
+      COOKIE_SECURE: 'false'
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+volumes:
+  mysql_data:
+  uploads:
