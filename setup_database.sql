@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS predictions (
     confidence DECIMAL(5, 4) NOT NULL,
     prediction_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     image_path VARCHAR(500),
+    username VARCHAR(255),
+    INDEX idx_prediction_username (username),
     INDEX idx_class (predicted_class),
     INDEX idx_timestamp (prediction_timestamp)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -36,11 +38,10 @@ CREATE TABLE IF NOT EXISTS users (
     INDEX idx_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Insert default doctor credentials
--- Username: doctor123, Password: password123
-INSERT INTO users (username, password, role, full_name) 
-VALUES ('doctor123', 'password123', 'doctor', 'Dr. Demo Account')
-ON DUPLICATE KEY UPDATE username=username;
+-- Security: no default doctor account or plaintext password is seeded.
+-- Register through the application after configuring FLASK_SECRET_KEY and MySQL.
+-- For existing installations, reset any accounts containing legacy plaintext passwords.
+-- Existing predictions databases must add username through a reviewed migration.
 
 -- Verify table creation
 DESCRIBE predictions;
@@ -48,4 +49,4 @@ DESCRIBE users;
 
 -- Display success message
 SELECT 'Database setup complete! Tables: predictions, users' AS Status;
-SELECT 'Default doctor login - Username: doctor123, Password: password123' AS Credentials;
+SELECT 'Create doctor accounts through /signup; legacy accounts require a password reset' AS Next_step;
