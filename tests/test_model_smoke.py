@@ -6,8 +6,7 @@ establish diagnostic accuracy or medical validity.
 import os
 from pathlib import Path
 
-os.environ["KERAS_BACKEND"] = "jax"
-os.environ["JAX_PLATFORM_NAME"] = "cpu"
+os.environ["KERAS_BACKEND"] = "tensorflow"
 
 import numpy as np
 from keras.models import load_model

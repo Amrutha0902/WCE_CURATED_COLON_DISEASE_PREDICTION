@@ -1,9 +1,15 @@
 import os
-os.environ['KERAS_BACKEND'] = 'jax'  # Set Keras backend to JAX
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
+
+# Use TensorFlow as the Keras backend
+os.environ["KERAS_BACKEND"] = "tensorflow"
 
 from flask import Flask, request, render_template, redirect, url_for, session, send_file
-from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
+from flask_wtf.csrf import CSRFProtect
 from flask_limiter.util import get_remote_address
 from keras.preprocessing.image import load_img, img_to_array
 from keras.models import load_model
