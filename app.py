@@ -162,6 +162,10 @@ def register_user(username, password, email=None, role='doctor'):
             return False
     return False
 
+@app.get('/healthz')
+def healthz():
+    return {'status': 'ok', 'service': 'wce-demo'}, 200
+
 @app.route('/')
 def index():
     is_logged_in = 'logged_in' in session
