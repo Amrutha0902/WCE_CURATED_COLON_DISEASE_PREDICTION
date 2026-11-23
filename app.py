@@ -44,7 +44,7 @@ DB_CONFIG = {
 }
 
 # Load your model
-model = load_model('model_1/Vgg.h5')
+model = load_model(str(Path(__file__).resolve().parent / 'model_1' / 'Vgg.h5'))
 
 print('Model Loaded!')
 
@@ -60,33 +60,6 @@ def get_db_connection():
         return None
 
 # Save Prediction to Database
-def ensure_predictions_user_column():
-    """Ensure predictions table has a username column to support per-user data."""
-    connection = get_db_connection()
-    if not connection:
-        return False
-    try:
-        cursor = connection.cursor()
-        check_query = """
-            SELECT COUNT(*) FROM information_schema.columns
-            WHERE table_schema = %s AND table_name = 'predictions' AND column_name = 'username'
-        """
-        cursor.execute(check_query, (DB_CONFIG['database'],))
-        exists = cursor.fetchone()[0] > 0
-        if not exists:
-            alter_query = "ALTER TABLE predictions ADD COLUMN username VARCHAR(255) AFTER confidence"
-            cursor.execute(alter_query)
-            connection.commit()
-            print("Added username column to predictions table for per-user tracking")
-        cursor.close()
-        connection.close()
-        return True
-    except Error as e:
-        print(f"Schema check/add error: {e}")
-        connection.close()
-        return False
-
-
 def save_prediction_to_db(filename, predicted_class, confidence, image_path, username=None):
     """Insert prediction result into MySQL database with user association"""
     # Database schema migrations must be performed separately from predictions.
