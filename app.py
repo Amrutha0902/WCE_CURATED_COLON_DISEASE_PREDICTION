@@ -1,6 +1,8 @@
 import os
-os.environ['KERAS_BACKEND'] = 'jax'  # Set Keras backend to JAX
+os.environ['KERAS_BACKEND'] = 'tensorflow'
+from dotenv import load_dotenv
 
+load_dotenv()
 from flask import Flask, request, render_template, redirect, url_for, session, send_file
 from keras.preprocessing.image import load_img, img_to_array
 from keras.models import load_model
@@ -14,14 +16,14 @@ import io
 import json
 
 app = Flask(__name__)
-app.secret_key = 'REDACTED_HISTORICAL_FLASK_SECRET'  # Change in production
+app.secret_key = os.environ['FLASK_SECRET_KEY']  # Change in production
 
 # MySQL Database Configuration
 DB_CONFIG = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'REDACTED_HISTORICAL_DB_PASSWORD',
-    'database': 'colon_disease_db'
+    'host': os.getenv('DB_HOST', 'localhost'),
+    'user': os.environ['DB_USER'],
+    'password': os.environ['DB_PASSWORD'],
+    'database': os.getenv('DB_NAME', 'colon_disease_db')
 }
 
 # Load your model
@@ -450,4 +452,4 @@ if __name__ == '__main__':
     print("========================\n")
     
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)  # Disable reloader to prevent crashes
+    app.run(host="127.0.0.1", port=5000, debug=False)  # Disable reloader to prevent crashes
