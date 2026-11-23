@@ -60,7 +60,7 @@ def main():
     if len({row["image_path"] for row in records}) != len(records):
         parser.error("Duplicate image paths in evaluation manifest")
     import os
-    os.environ.setdefault("KERAS_BACKEND", "jax")
+    os.environ["KERAS_BACKEND"] = "tensorflow"
     from keras.models import load_model
     from keras.preprocessing.image import load_img, img_to_array
 
