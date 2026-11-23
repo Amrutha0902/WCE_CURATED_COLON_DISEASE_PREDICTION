@@ -69,5 +69,12 @@ jobs:
           python-version: '3.11'
       - name: Install real model runtime dependencies
         run: python -m pip install 'pytest>=8,<10' 'keras>=3,<4' 'jax[cpu]>=0.4.30' 'numpy>=1.26,<3' 'h5py>=3.10,<4' 'Pillow>=10,<13'
+      - name: Install full declared application dependencies
+        run: python -m pip install -r requirements.txt
       - name: Deserialize model and run single CPU inference
         run: python -m pytest -q tests/test_model_smoke.py
+      - name: Import real Flask application with saved model
+        env:
+          FLASK_SECRET_KEY: throwaway-ci-secret-for-app-import-only-123456
+          COOKIE_SECURE: 'false'
+        run: python -c "import app; assert app.model is not None; print('Flask application and VGG model import succeeded')"
