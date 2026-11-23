@@ -9,7 +9,9 @@ import os
 
 import mysql.connector
 from werkzeug.security import generate_password_hash
+from dotenv import load_dotenv
 
+load_dotenv()
 
 def main():
     parser = argparse.ArgumentParser(description="Trusted administrator-only password reset")
@@ -29,6 +31,16 @@ def main():
         "password": os.environ.get("DB_PASSWORD", ""),
         "database": os.environ.get("DB_NAME", "colon_disease_db"),
     }
+    print(f"Target database: {cfg['database']}")
+    print(f"Database user: {cfg['user']}")
+
+    confirmation = input(
+        f"Type {cfg['database']} to confirm the target database: "
+    )
+
+    if confirmation != cfg["database"]:
+        raise SystemExit("Database confirmation failed. No changes made.")
+
     connection = mysql.connector.connect(**cfg)
     try:
         cursor = connection.cursor()
