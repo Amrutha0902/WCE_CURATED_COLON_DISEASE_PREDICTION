@@ -4,8 +4,23 @@ on:
   push:
     branches:
       - security/wce-hardening-2026
+      - security/post-audit-remediation-2026
 
 jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies and vulnerability auditor
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install 'pip-audit>=2.7,<3'
+      - name: Fail on known vulnerable installed dependencies
+        run: python -m pip_audit --disable-pip --progress-spinner off
+
   static-security-checks:
     runs-on: ubuntu-latest
     steps:
