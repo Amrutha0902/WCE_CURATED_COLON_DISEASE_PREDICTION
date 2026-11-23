@@ -78,3 +78,44 @@ jobs:
           FLASK_SECRET_KEY: throwaway-ci-secret-for-app-import-only-123456
           COOKIE_SECURE: 'false'
         run: python -c "import app; assert app.model is not None; print('Flask application and VGG model import succeeded')"
+
+  full-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-only-throwaway-password
+          MYSQL_DATABASE: colon_disease_db_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-only-throwaway-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+    env:
+      WCE_E2E_TEST: '1'
+      DB_HOST: 127.0.0.1
+      DB_USER: root
+      DB_PASSWORD: ci-only-throwaway-password
+      DB_NAME: colon_disease_db_test
+      FLASK_SECRET_KEY: ci-only-throwaway-signing-key-123456789
+      COOKIE_SECURE: 'false'
+      KERAS_BACKEND: jax
+      JAX_PLATFORM_NAME: cpu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install application and test dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Initialize disposable MySQL schema
+        env:
+          MYSQL_PWD: ci-only-throwaway-password
+        run: |
+          sed 's/colon_disease_db/colon_disease_db_test/g' setup_database.sql | mysql -h 127.0.0.1 -uroot
+      - name: Test complete real model HTTP workflow
+        run: python -m pytest -q tests/test_full_e2e.py
