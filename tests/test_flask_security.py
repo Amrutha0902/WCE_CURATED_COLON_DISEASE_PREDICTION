@@ -209,3 +209,73 @@ def test_doctor_self_signup_is_disabled_by_default(application, monkeypatch):
             "signup_confirm_password": "long-password-12345",
         })
         assert response.status_code == 403
+
+
+def test_auth_guard_rejects_session_without_username(application):
+    app, _users = application
+    with app.test_client() as client:
+        with client.session_transaction() as sess:
+            sess["logged_in"] = True
+        assert client.get("/analysis").status_code == 200
+        assert b"auth" in client.get("/analysis").data.lower()
+        assert client.get("/predict").status_code in (302, 303)
+
+
+def test_analysis_exception_does_not_disclose_internal_details(application, monkeypatch):
+    app, _users = application
+    module = app.view_functions["analysis"].__wrapped__.__globals__
+    class BrokenPandas:
+        @staticmethod
+        def read_sql(*args, **kwargs):
+            raise RuntimeError("private-db-host-and-secret")
+    monkeypatch.setitem(module, "pd", BrokenPandas())
+    with app.test_client() as client:
+        with client.session_transaction() as sess:
+            sess["logged_in"] = True
+            sess["username"] = "test-doctor"
+        response = client.get("/analysis")
+        assert response.status_code == 200
+        assert b"private-db-host-and-secret" not in response.data
+        assert b"temporarily unavailable" in response.data
+
+
+def test_report_exception_does_not_disclose_internal_details(application, monkeypatch):
+    app, _users = application
+    module = app.view_functions["download_report"].__wrapped__.__globals__
+    class BrokenPandas:
+        @staticmethod
+        def read_sql(*args, **kwargs):
+            raise RuntimeError("private-db-host-and-secret")
+    monkeypatch.setitem(module, "pd", BrokenPandas())
+    with app.test_client() as client:
+        with client.session_transaction() as sess:
+            sess["logged_in"] = True
+            sess["username"] = "test-doctor"
+        response = client.get("/download-report")
+        assert response.status_code == 500
+        assert b"private-db-host-and-secret" not in response.data
+        assert b"temporarily unavailable" in response.data
+
+
+def test_report_excludes_uploaded_image_identifiers_from_query(application, monkeypatch):
+    app, _users = application
+    module = app.view_functions["download_report"].__wrapped__.__globals__
+    captured = []
+    class FakeFrame:
+        empty = True
+    class CapturePandas:
+        @staticmethod
+        def read_sql(query, connection, params):
+            captured.append((query, params))
+            return FakeFrame()
+    monkeypatch.setitem(module, "pd", CapturePandas())
+    with app.test_client() as client:
+        with client.session_transaction() as sess:
+            sess["logged_in"] = True
+            sess["username"] = "test-doctor"
+        response = client.get("/download-report")
+        assert response.status_code == 404
+    assert captured
+    assert "filename" not in captured[0][0].lower()
+    assert "image_path" not in captured[0][0].lower()
+    assert captured[0][1] == ("test-doctor",)
