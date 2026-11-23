@@ -44,7 +44,7 @@ DB_CONFIG = {
 }
 
 # Load your model
-model = load_model(str(Path(__file__).resolve().parent / 'model_1' / 'Vgg.h5'))
+model = load_model(str(Path(__file__).resolve().parent / 'model_1' / 'Vgg.h5'), compile=False)
 
 print('Model Loaded!')
 
