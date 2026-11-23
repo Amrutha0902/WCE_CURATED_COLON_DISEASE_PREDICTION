@@ -2,6 +2,7 @@ import os
 os.environ['KERAS_BACKEND'] = 'jax'  # Set Keras backend to JAX
 
 from flask import Flask, request, render_template, redirect, url_for, session, send_file
+from flask_wtf.csrf import CSRFProtect
 from keras.preprocessing.image import load_img, img_to_array
 from keras.models import load_model
 import numpy as np
@@ -19,6 +20,7 @@ from werkzeug.utils import secure_filename
 from PIL import Image, UnidentifiedImageError
 
 app = Flask(__name__)
+CSRFProtect(app)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY')
 if not app.secret_key:
     raise RuntimeError('FLASK_SECRET_KEY must be set to a strong random value')
