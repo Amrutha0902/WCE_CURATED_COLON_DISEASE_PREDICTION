@@ -194,3 +194,18 @@ def test_upload_rejects_invalid_files(application, filename, data):
             "image": (io.BytesIO(data), filename),
         })
         assert response.status_code == 400
+
+
+def test_doctor_self_signup_is_disabled_by_default(application, monkeypatch):
+    app, _users = application
+    monkeypatch.delenv("WCE_ALLOW_SELF_SIGNUP", raising=False)
+    with app.test_client() as client:
+        assert client.get("/signup-page").status_code == 403
+        token = csrf_token(client, "/")
+        response = client.post("/signup", data={
+            "csrf_token": token,
+            "signup_username": "unverified",
+            "signup_password": "long-password-12345",
+            "signup_confirm_password": "long-password-12345",
+        })
+        assert response.status_code == 403
