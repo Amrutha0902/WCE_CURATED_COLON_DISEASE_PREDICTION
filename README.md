@@ -510,3 +510,17 @@ The `security/wce-hardening-2026` branch makes initial security improvements:
 The users table supports password hashes. Legacy plaintext accounts must use a trusted password reset/re-provisioning process; credentials must never be logged or exported. Existing installations need a reviewed schema migration if `predictions.username` is missing; `setup_database.sql` defines the column for **fresh** databases only. The application no longer alters schema during prediction requests. For older databases, review, back up, and apply `migrations/001_predictions_username.sql`.
 
 **Verified with substitutes:** Flask request-level tests of login hashing, legacy-login rejection, CSRF, login rate limiting, and invalid uploads. **Not yet verified:** real MySQL integration, model inference and model accuracy, full dependency compatibility on a fresh machine, distributed rate limiting, complete upload threat-model testing, production deployment, and full end-to-end tests. Review `SECURITY.md` before any public deployment. Previously exposed keys/passwords must be **rotated outside GitHub**.
+
+
+### CI verification matrix (security branch)
+
+| CI job | Scope | Limitation |
+|---|---|---|
+| static-security-checks | Flask request tests and source safety checks | MySQL/model substitutes |
+| mysql-integration | Live disposable MySQL 8: SQL inserts, account hashing/verification, user-scoped prediction storage | Keras model substituted; no production database |
+| model-smoke | Real `model_1/Vgg.h5` loaded with Keras/JAX on CPU; synthetic inference checks a finite four-class vector | Synthetic image only; no clinical accuracy evaluation |
+| model-smoke (application import) | Installs `requirements.txt` and imports actual Flask app/model | Does not start HTTP server, connect real DB, or submit full prediction HTTP request |
+
+Run `python -m pytest -q tests/test_security_contract.py tests/test_flask_security.py` for isolated checks; the MySQL integration suite requires a **disposable** database named `colon_disease_db_test` and `WCE_MYSQL_TEST=1`. Do not run it on production records.
+
+CI success confirms the tested code path only. The remaining medical model quality, role authorization and deployment risks in `SECURITY.md` remain open.
