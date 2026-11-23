@@ -62,6 +62,7 @@ def application(monkeypatch):
     # tests; stub external integration boundaries before importing the real app.
     monkeypatch.setenv("FLASK_SECRET_KEY", "unit-testing-only-secret-not-for-production-12345")
     monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setenv("WCE_ALLOW_SELF_SIGNUP", "true")
 
     keras = types.ModuleType("keras")
     keras.__path__ = []
