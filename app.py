@@ -494,7 +494,7 @@ def result():
             filename=original_name,
             predicted_class=predicted_class,
             confidence=confidence,
-            image_path=filepath,
+            image_path='',
             username=username
         ):
             os.remove(filepath)
