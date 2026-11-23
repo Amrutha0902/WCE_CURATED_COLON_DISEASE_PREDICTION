@@ -34,6 +34,8 @@ app = Flask(__name__)
 if os.getenv('WCE_PRODUCTION', 'false').lower() == 'true':
     if os.getenv('RATELIMIT_STORAGE_URI', 'memory://').startswith('memory://'):
         raise RuntimeError('Production requires persistent RATELIMIT_STORAGE_URI')
+    if os.getenv('WCE_ALLOW_SELF_SIGNUP', 'false').lower() == 'true':
+        raise RuntimeError('Production forbids unverified doctor self-signup')
     if os.getenv('COOKIE_SECURE', 'true').lower() != 'true':
         raise RuntimeError('Production requires secure session cookies')
 CSRFProtect(app)
