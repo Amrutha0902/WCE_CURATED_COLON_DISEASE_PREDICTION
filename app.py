@@ -173,12 +173,16 @@ def index():
 
 @app.route('/signup-page')
 def signup_page():
-    """Display Signup Page"""
+    """Display Signup Page only in explicitly enabled demo environments."""
+    if os.getenv('WCE_ALLOW_SELF_SIGNUP', 'false').lower() != 'true':
+        return 'Public doctor registration is disabled', 403
     return render_template('signup.html')
 
 @app.route('/signup', methods=['POST'])
 def signup():
-    """User Signup Route"""
+    """Demo-only user signup; real doctor accounts require verified provisioning."""
+    if os.getenv('WCE_ALLOW_SELF_SIGNUP', 'false').lower() != 'true':
+        return 'Public doctor registration is disabled', 403
     username = request.form.get('signup_username')
     password = request.form.get('signup_password')
     confirm_password = request.form.get('signup_confirm_password')
