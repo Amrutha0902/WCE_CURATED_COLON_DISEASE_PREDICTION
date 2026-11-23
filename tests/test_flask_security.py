@@ -71,7 +71,7 @@ def application(monkeypatch):
     image.load_img = lambda *a, **k: None
     image.img_to_array = lambda *a, **k: None
     models = types.ModuleType("keras.models")
-    models.load_model = lambda path: object()
+    models.load_model = lambda path, **kwargs: object()
     for name, mod in [
         ("keras", keras), ("keras.preprocessing", preprocessing),
         ("keras.preprocessing.image", image), ("keras.models", models)
