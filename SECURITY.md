@@ -67,3 +67,9 @@ A CLI helper `scripts/admin_reset_password.py --username ACCOUNT` prompts for a 
 - The new README removes legacy JAX and default-login instructions and clearly labels the application a research/portfolio demo.
 
 **Merge recommendation:** keep PR #1 as draft until critical credential/legacy-account risks have been addressed or explicitly scoped to a non-deployed demo, and the security review is approved. Do not treat CI success as production or clinical approval.
+
+## Post-audit remediation branch (23 November 2026)
+
+The `security/post-audit-remediation-2026` branch adds basic response headers, an eight-hour permanent-session lifetime for new logins, a 20-million-pixel upload limit, JPEG/PNG format verification, removal of successfully processed image files, and redaction of raw MySQL exception text from application logging. Successful prediction records now store an empty image path. Existing stored images are **not** automatically deleted. These changes require CI and manual validation before merging.
+
+Still open: account revocation/session invalidation, shared rate-limit storage, CSRF-protected POST logout, full medical-data retention governance, isolated image inference, clinical model validation, and production deployment testing. Historical credential rotation was reported locally but deployed credentials and historical access have not been independently audited.
