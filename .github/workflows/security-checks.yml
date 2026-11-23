@@ -55,3 +55,19 @@ jobs:
           sed 's/colon_disease_db/colon_disease_db_test/g' setup_database.sql | mysql -h 127.0.0.1 -uroot
       - name: Exercise real SQL queries against MySQL
         run: python -m pytest -q tests/test_mysql_integration.py
+
+  model-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      KERAS_BACKEND: jax
+      JAX_PLATFORM_NAME: cpu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install real model runtime dependencies
+        run: python -m pip install 'pytest>=8,<10' 'keras>=3,<4' 'jax[cpu]>=0.4.30' 'numpy>=1.26,<3' 'h5py>=3.10,<4' 'Pillow>=10,<13'
+      - name: Deserialize model and run single CPU inference
+        run: python -m pytest -q tests/test_model_smoke.py
