@@ -3,6 +3,8 @@ os.environ['KERAS_BACKEND'] = 'jax'  # Set Keras backend to JAX
 
 from flask import Flask, request, render_template, redirect, url_for, session, send_file
 from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from keras.preprocessing.image import load_img, img_to_array
 from keras.models import load_model
 import numpy as np
@@ -21,6 +23,12 @@ from PIL import Image, UnidentifiedImageError
 
 app = Flask(__name__)
 CSRFProtect(app)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    storage_uri=os.environ.get('RATELIMIT_STORAGE_URI', 'memory://'),
+    default_limits=[],
+)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY')
 if not app.secret_key:
     raise RuntimeError('FLASK_SECRET_KEY must be set to a strong random value')
@@ -81,9 +89,7 @@ def ensure_predictions_user_column():
 
 def save_prediction_to_db(filename, predicted_class, confidence, image_path, username=None):
     """Insert prediction result into MySQL database with user association"""
-    # Ensure schema supports username; if not, attempt to add it
-    ensure_predictions_user_column()
-
+    # Database schema migrations must be performed separately from predictions.
     connection = get_db_connection()
     if connection:
         try:
@@ -94,7 +100,7 @@ def save_prediction_to_db(filename, predicted_class, confidence, image_path, use
             """
             cursor.execute(query, (filename, predicted_class, float(confidence), image_path, username))
             connection.commit()
-            print(f"Prediction saved: {filename} -> {predicted_class} ({confidence:.4f}) for user {username}")
+            app.logger.info('Prediction stored for authenticated user')
             cursor.close()
             connection.close()
             return True
@@ -241,6 +247,7 @@ def login_page():
     return render_template('login.html')
 
 @app.route('/login-home', methods=['POST'])
+@limiter.limit('5 per minute')
 def login_home():
     """Doctor Login Route from Home Page"""
     username = request.form.get('login_username')
@@ -455,26 +462,34 @@ def result():
             return 'Invalid image file', 400
 
         # Read and preprocess the image
-        img = load_img(filepath, target_size=(224, 224))
-        x = img_to_array(img)
-        x = np.expand_dims(x, axis=0)
-        x = x / 255.0  # Normalize the image
-        
-        # Make predictions using the model
-        predictions = model.predict(x)
+        try:
+            img = load_img(filepath, target_size=(224, 224))
+            x = img_to_array(img)
+            x = np.expand_dims(x, axis=0)
+            x = x / 255.0  # Normalize the image
+            predictions = model.predict(x)
+        except Exception:
+            app.logger.exception('Model inference failed')
+            os.remove(filepath)
+            return 'Prediction temporarily unavailable', 503
+        if getattr(predictions, 'shape', None) != (1, 4) or not np.all(np.isfinite(predictions)):
+            os.remove(filepath)
+            return 'Invalid prediction output', 503
         class_index = np.argmax(predictions, axis=1)[0]
         class_names = ['Normal', 'Ulcerative Colitis', 'Polyps', 'Esophagitis']
         predicted_class = class_names[class_index]
         confidence = predictions[0][class_index]
         
         # Save prediction to MySQL database
-        save_prediction_to_db(
+        if not save_prediction_to_db(
             filename=original_name,
             predicted_class=predicted_class,
             confidence=confidence,
             image_path=filepath,
             username=username
-        )
+        ):
+            os.remove(filepath)
+            return 'Prediction could not be saved', 503
         
         result_text = f"Prediction: {predicted_class} with confidence {confidence:.2f}"
         
