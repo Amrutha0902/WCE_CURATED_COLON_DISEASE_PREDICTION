@@ -5,9 +5,10 @@ Flask-Limiter>=3.8,<5
 Werkzeug>=3.0,<4
 mysql-connector-python>=9.0,<10
 keras>=3.0,<4
-jax>=0.4.30
-jaxlib>=0.4.30
-numpy>=1.26,<3
+tensorflow==2.16.2
+numpy==1.26.4
+ml-dtypes==0.3.2
+python-dotenv>=1.0,<2
 pandas>=2.2,<3
 Pillow>=10,<13
 h5py>=3.10,<4
