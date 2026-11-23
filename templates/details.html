@@ -26,6 +26,7 @@
                 <h1>COLON DISEASE PREDICTION</h1>
                 <p>Predicting colon diseases using transfer learning typically involves leveraging pre-trained deep learning models on large datasets for image classification tasks.</p>
                 <form action="{{ url_for('result') }}" method="post" enctype="multipart/form-data" class="form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="file" name="image" id="upload_file" accept=".png, .jpg, .jpeg" onchange="loadFile(event)">
                     <input type="submit" value="Predict" id="submitBtn" class="form-submit-button">
                     <p><img id="out" width="200"></p>
