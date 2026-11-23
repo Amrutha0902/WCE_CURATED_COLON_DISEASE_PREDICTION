@@ -35,3 +35,8 @@ Unverified public doctor signup is **disabled by default**. The flag `WCE_ALLOW_
 ## New test and container artifacts
 
 The CI `full-e2e` job uses a disposable MySQL instance and synthetic image to test the actual VGG inference and dashboard workflow. The Dockerfile/Compose setup is for localhost demonstrations only, not a production deployment; it has not been independently built and launched in this audit. The evaluation script requires an independent labeled dataset and does not establish medical efficacy without one.
+
+
+### Trusted operator-only legacy password reset
+
+A CLI helper `scripts/admin_reset_password.py --username ACCOUNT` prompts for a new password without echoing it and stores a salted hash. It requires the operator to verify identity out of band and explicitly set `WCE_ADMIN_RESET_CONFIRM=I_VERIFIED_IDENTITY`. Use it only from a trusted machine with restricted MySQL access, a backed-up database, and a secure channel for notifying the account holder. This is **not** a self-service recovery system; it does not verify medical qualifications or automatically revoke all existing sessions. No real account was changed by this work.
