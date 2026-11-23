@@ -32,8 +32,8 @@ from PIL import Image as PillowImage
 
 app = Flask(__name__)
 if os.getenv('WCE_PRODUCTION', 'false').lower() == 'true':
-    if os.getenv('RATELIMIT_STORAGE_URI', 'memory://').startswith('memory://'):
-        raise RuntimeError('Production requires persistent RATELIMIT_STORAGE_URI')
+    if not os.getenv('RATELIMIT_STORAGE_URI', '').startswith(('redis://', 'rediss://')):
+        raise RuntimeError('Production requires a Redis RATELIMIT_STORAGE_URI')
     if os.getenv('WCE_ALLOW_SELF_SIGNUP', 'false').lower() == 'true':
         raise RuntimeError('Production forbids unverified doctor self-signup')
     if os.getenv('COOKIE_SECURE', 'true').lower() != 'true':
@@ -44,6 +44,8 @@ limiter = Limiter(
     app=app,
     storage_uri=os.environ.get('RATELIMIT_STORAGE_URI', 'memory://'),
     default_limits=[],
+    in_memory_fallback_enabled=False,
+    swallow_errors=False,
 )
 app.secret_key = os.environ.get('FLASK_SECRET_KEY')
 if not app.secret_key:
@@ -51,6 +53,9 @@ if not app.secret_key:
 app.config.update(MAX_CONTENT_LENGTH=8 * 1024 * 1024, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax', SESSION_COOKIE_SECURE=os.getenv('COOKIE_SECURE', 'true').lower() == 'true', PERMANENT_SESSION_LIFETIME=timedelta(hours=8))
 
 MAX_IMAGE_PIXELS = 20_000_000
+MAX_IMAGE_EDGE = 8192
+# Production concurrency and hard time limits are enforced by the serving runtime.
+# Do not treat the Gunicorn request timeout as a kill switch for threads.
 PillowImage.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 @app.after_request
@@ -505,7 +510,8 @@ def result():
             with Image.open(filepath) as uploaded_image:
                 if uploaded_image.format not in {'JPEG', 'PNG'}:
                     raise ValueError('Unsupported image encoding')
-                if uploaded_image.width * uploaded_image.height > MAX_IMAGE_PIXELS:
+                if (uploaded_image.width > MAX_IMAGE_EDGE or uploaded_image.height > MAX_IMAGE_EDGE
+                        or uploaded_image.width * uploaded_image.height > MAX_IMAGE_PIXELS):
                     raise ValueError('Image dimensions exceed safe limit')
                 uploaded_image.verify()
         except (OSError, UnidentifiedImageError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
@@ -534,7 +540,7 @@ def result():
         
         # Save prediction to MySQL database
         if not save_prediction_to_db(
-            filename=original_name,
+            filename='',  # Never retain the patient-provided original filename.
             predicted_class=predicted_class,
             confidence=confidence,
             image_path='',
