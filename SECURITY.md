@@ -26,3 +26,12 @@ Before enabling this app publicly, implement a verified account recovery/reset w
 - Some legacy routes still expose internal exception details and require error response normalization.
 - Request-level tests in `tests/test_flask_security.py` exercise Flask code with model/database substitutes. Real MySQL/JAX/model and deployment integration remain unverified.
 - Use `migrations/001_predictions_username.sql` only after backup and review on legacy databases. Prediction requests no longer change the database schema.
+
+
+## Current self-registration policy
+
+Unverified public doctor signup is **disabled by default**. The flag `WCE_ALLOW_SELF_SIGNUP=true` is permitted only for disposable, isolated demonstration environments; it is not identity verification. Before real deployment, build an administrator-approved invitation/provisioning workflow and a secure reset process with out-of-band identity verification. No production account reset has been performed.
+
+## New test and container artifacts
+
+The CI `full-e2e` job uses a disposable MySQL instance and synthetic image to test the actual VGG inference and dashboard workflow. The Dockerfile/Compose setup is for localhost demonstrations only, not a production deployment; it has not been independently built and launched in this audit. The evaluation script requires an independent labeled dataset and does not establish medical efficacy without one.
