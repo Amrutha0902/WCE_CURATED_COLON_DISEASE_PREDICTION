@@ -12,9 +12,17 @@ Before enabling this app publicly, implement a verified account recovery/reset w
 
 ## Application security limitations
 
-- CSRF tokens are required for browser POST forms, but the full protection has not been tested against a running app. Login rate limiting is not implemented; do not expose it publicly until rate limiting and full security integration tests are verified.
+- CSRF tokens are required for browser POST forms, but the full protection has not been tested against a running app. The login route now has a 5/minute limit with in-memory storage by default; production requires shared persistent rate-limit storage such as Redis, trusted proxy/IP settings, and deployment-specific testing. Do not expose it publicly until full security integration tests are verified.
 - New browser sessions are marked Secure by default; for localhost HTTP-only development, set COOKIE_SECURE=false.
 - Medical uploads and predictions may be sensitive. Configure retention/access policies and avoid logging private details.
 - Upload validation checks image type and size, but a dedicated image processing sandbox, malware checks, and content security controls may be needed for production.
 - The old model artifact and model quality have **not** been evaluated in this branch.
 - No security or integration tests have been executed in a live MySQL/model environment.
+
+## Additional operational and authorization risks
+
+- Self-registration creates doctor-role accounts without verifying medical credentials; this is a **demo-only** workflow, not suitable for a healthcare deployment. Doctor access would require identity verification and administrative provisioning.
+- Rate limiting uses in-memory state in local development; a production multi-worker environment requires an appropriate shared backend configured using `RATELIMIT_STORAGE_URI`.
+- Some legacy routes still expose internal exception details and require error response normalization.
+- Request-level tests in `tests/test_flask_security.py` exercise Flask code with model/database substitutes. Real MySQL/JAX/model and deployment integration remain unverified.
+- Use `migrations/001_predictions_username.sql` only after backup and review on legacy databases. Prediction requests no longer change the database schema.
