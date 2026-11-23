@@ -327,7 +327,7 @@
                 {% endif %}
                 <a href="{{ url_for('contact') }}">Contact</a>
                 {% if is_logged_in %}
-                    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+                    <form action="{{ url_for('logout') }}" method="post" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="logout-btn">Logout</button></form>
                 {% endif %}
             </div>
         </nav>
