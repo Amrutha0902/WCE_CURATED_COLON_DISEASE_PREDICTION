@@ -31,7 +31,7 @@ Flask application (app.py)
 | --- | --- |
 | Frontend | HTML, CSS, JavaScript, Chart.js |
 | Backend | Python 3.11, Flask, Flask-WTF, Flask-Limiter, Werkzeug |
-| ML inference | TensorFlow 2.16.2, Keras, NumPy, Pillow, saved VGG model |
+| ML inference | TensorFlow 2.21.0, Keras, NumPy, Pillow, saved VGG model |
 | Persistence and reporting | MySQL 8, mysql-connector-python, Pandas |
 | Quality checks | pytest, GitHub Actions, Docker image build |
 
@@ -86,10 +86,10 @@ The exact dependency constraints are in [requirements.txt](requirements.txt); do
 | `/result` | POST | Authenticated image inference and MySQL save |
 | `/analysis` | GET | Authenticated, user-scoped analytics |
 | `/download-report` | GET | Authenticated, user-scoped CSV export |
-| `/logout` | GET | Clear session |
+| `/logout` | POST | CSRF-protected session logout |
 | `/healthz` | GET | Basic liveness response; not a DB/model readiness check |
 
-`/result` returns rendered HTML, not a JSON prediction API. Prediction records contain image paths and filenames; treat uploads and exports as potentially sensitive data.
+`/result` returns rendered HTML, not a JSON prediction API. New prediction records deliberately store empty filename and image-path fields; uploaded images are deleted after inference on the normal success path. Legacy records may still contain sensitive filenames or paths, and temporary files may remain if deletion fails. Treat database exports and medical images as sensitive.
 
 ## Database and migrations
 
@@ -101,7 +101,7 @@ The exact dependency constraints are in [requirements.txt](requirements.txt); do
 
 ## Testing and CI
 
-The security branch has a five-job workflow at [GitHub Actions](https://github.com/Amrutha0902/WCE_CURATED_COLON_DISEASE_PREDICTION/actions):
+The security branch has a six-job workflow at [GitHub Actions](https://github.com/Amrutha0902/WCE_CURATED_COLON_DISEASE_PREDICTION/actions):
 
 | Job | What it verifies |
 | --- | --- |
@@ -111,7 +111,9 @@ The security branch has a five-job workflow at [GitHub Actions](https://github.c
 | `full-e2e` | Synthetic-image HTTP upload, real VGG inference, login, disposable MySQL persistence and analysis |
 | `docker-build` | Docker image build and Compose configuration validation; **not** running-container verification |
 
-**All five jobs passed on the security branch at commit `c3a7ef2` (23 November 2026).** This confirms the configured tests, not clinical efficacy or a full penetration test.
+The table lists five named jobs from the earlier workflow; consult the current workflow file for the additional job and its checks.
+
+**Six CI jobs have been reported passing on the remediation branch.** Check the latest [GitHub Actions runs](https://github.com/Amrutha0902/WCE_CURATED_COLON_DISEASE_PREDICTION/actions) for the exact commit and current results. Passing CI does not establish clinical efficacy or constitute a full penetration test.
 
 For a regular local test run:
 
@@ -134,6 +136,16 @@ docker compose up --build
 
 Visit `http://127.0.0.1:8000`. **Do not expose this demo to the public Internet or use patient data.** The CI pipeline builds the image but has not established production deployment security or container runtime behavior. Persistent MySQL volumes are not automatically migrated.
 
+## Dataset sources and attribution
+
+The model-training notebooks reference the [Curated Colon Dataset for Deep Learning](https://www.kaggle.com/datasets/francismon/curated-colon-dataset-for-deep-learning), uploaded by **francismon**. Its dataset description asks users to consult the original sources and credits:
+
+- **KVASIR:** K. Pogorelov et al., *KVASIR*, Proceedings of the 8th ACM Multimedia Systems Conference (2017). [DOI: 10.1145/3083187.3083212](https://doi.org/10.1145/3083187.3083212).
+- **ETIS-Larib-Polyp DB:** J. Silva et al., *Toward embedded detection of polyps in WCE images for early diagnosis of colorectal cancer*, International Journal of Computer Assisted Radiology and Surgery 9, 283–293 (2013). [DOI: 10.1007/s11548-013-0926-3](https://doi.org/10.1007/s11548-013-0926-3).
+- **Related study cited in the dataset description:** F. J. P. Montalbo, *Diagnosing Gastrointestinal Diseases from Endoscopy Images through a Multi-Fused CNN with Auxiliary Layers, Alpha Dropouts, and a Fusion Residual Block*, Biomedical Signal Processing and Control 76 (2022). [DOI: 10.1016/j.bspc.2022.103683](https://doi.org/10.1016/j.bspc.2022.103683).
+
+**Licensing and provenance:** The supplied dataset description does not establish permission to redistribute individual medical images. All 14 legacy JPGs in the archived Flask `uploads/` directory failed byte-for-byte SHA256 matching against the locally downloaded dataset; this does not rule out transformed copies. They are being removed from current Git tracking pending source, permission, and privacy verification. Historical Git commits may still contain them. Do not commit patient images or identifying data.
+
 ## Model evaluation (not yet completed)
 
 The repository includes `scripts/evaluate_vgg.py`. It accepts a labeled CSV manifest with `image_path,label,patient_id` and an image root, and outputs accuracy, macro F1, per-class metrics and a confusion matrix:
@@ -150,8 +162,8 @@ The security branch improves credential configuration, password hashing, CSRF, l
 
 - Previously exposed credentials in Git history require rotation and incident review; deleting current-file secrets does not erase history.
 - Legacy plaintext-password accounts need verified reset/re-provisioning; no public doctor credential verification workflow exists.
-- In-memory rate limiting is unsuitable for multi-worker production use.
-- Some error paths expose internal exception details, and medical upload retention/access policies need work.
+- Production mode (`WCE_PRODUCTION=true`) requires a Redis `RATELIMIT_STORAGE_URI`, secure cookies, and disabled self-signup. The limiter has no in-memory fallback; a Redis outage may cause request failures rather than bypassing throttling. Development mode may use in-memory storage, which is unsuitable for multi-worker production use.
+- Uploads have an 8 MiB request limit and configured image-dimension checks (20 million pixels; 8192 pixels per edge), but these do not guarantee hard CPU/memory/inference limits. Temporary uploads are deleted on the normal completion path; deletion failures, legacy stored images, and retention/access policies still need review.
 - Model class mapping, clinical performance, privacy controls, and running-container security require further validation.
 
 See [SECURITY.md](SECURITY.md) and [the security-hardening PR](https://github.com/Amrutha0902/WCE_CURATED_COLON_DISEASE_PREDICTION/pull/1) for details.

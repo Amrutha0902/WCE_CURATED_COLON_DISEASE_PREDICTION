@@ -70,7 +70,7 @@ def test_real_model_http_to_mysql_roundtrip():
 
             cursor = connection.cursor()
             cursor.execute(
-                "SELECT predicted_class, confidence, image_path FROM predictions WHERE username=%s",
+                "SELECT predicted_class, confidence, image_path, filename FROM predictions WHERE username=%s",
                 (username,),
             )
             rows = cursor.fetchall()
@@ -79,9 +79,9 @@ def test_real_model_http_to_mysql_roundtrip():
             assert rows[0][0] in ("Normal", "Ulcerative Colitis", "Polyps", "Esophagitis")
             assert 0 <= float(rows[0][1]) <= 1
             # Clean up generated synthetic image after verification.
-            saved = Path(rows[0][2]).resolve()
-            assert saved.parent == (ROOT / "uploads").resolve()
-            saved.unlink(missing_ok=True)
+            assert rows[0][2] in ('', None)
+            assert rows[0][3] in ('', None), 'Original patient filename must not persist'
+            # Stored metadata no longer contains a filesystem path.
             response = client.get("/analysis")
             assert response.status_code == 200
     finally:
