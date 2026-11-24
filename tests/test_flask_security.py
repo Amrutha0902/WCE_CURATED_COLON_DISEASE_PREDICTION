@@ -99,6 +99,7 @@ def application(monkeypatch):
     module.app.config.update(TESTING=True, RATELIMIT_ENABLED=True)
     users = {}
     monkeypatch.setattr(module, "get_db_connection", lambda: FakeConnection(users))
+    monkeypatch.setattr(module, "account_session_fingerprint", lambda username: ('test-fingerprint' if username in users or username == 'test-doctor' else None))
     return module.app, users
 
 
@@ -133,6 +134,7 @@ def test_registration_and_login_use_hashes(application):
         })
         assert response.status_code == 200
         with client.session_transaction() as session:
+            assert session["account_fingerprint"] == "test-fingerprint"
             assert session["username"] == "alice"
             assert session["logged_in"] is True
 
@@ -188,6 +190,7 @@ def test_upload_rejects_invalid_files(application, filename, data):
         with client.session_transaction() as session:
             session["username"] = "test-doctor"
             session["logged_in"] = True
+            session["account_fingerprint"] = "test-fingerprint"
         token = csrf_token(client, "/predict")
         response = client.post("/result", data={
             "csrf_token": token,
@@ -216,6 +219,7 @@ def test_auth_guard_rejects_session_without_username(application):
     with app.test_client() as client:
         with client.session_transaction() as sess:
             sess["logged_in"] = True
+            sess["account_fingerprint"] = "test-fingerprint"
         assert client.get("/analysis").status_code == 200
         assert b"auth" in client.get("/analysis").data.lower()
         assert client.get("/predict").status_code in (302, 303)
@@ -233,6 +237,7 @@ def test_analysis_exception_does_not_disclose_internal_details(application, monk
         with client.session_transaction() as sess:
             sess["logged_in"] = True
             sess["username"] = "test-doctor"
+            sess["account_fingerprint"] = "test-fingerprint"
         response = client.get("/analysis")
         assert response.status_code == 200
         assert b"private-db-host-and-secret" not in response.data
@@ -251,6 +256,7 @@ def test_report_exception_does_not_disclose_internal_details(application, monkey
         with client.session_transaction() as sess:
             sess["logged_in"] = True
             sess["username"] = "test-doctor"
+            sess["account_fingerprint"] = "test-fingerprint"
         response = client.get("/download-report")
         assert response.status_code == 500
         assert b"private-db-host-and-secret" not in response.data
@@ -273,9 +279,37 @@ def test_report_excludes_uploaded_image_identifiers_from_query(application, monk
         with client.session_transaction() as sess:
             sess["logged_in"] = True
             sess["username"] = "test-doctor"
+            sess["account_fingerprint"] = "test-fingerprint"
         response = client.get("/download-report")
         assert response.status_code == 404
     assert captured
     assert "filename" not in captured[0][0].lower()
     assert "image_path" not in captured[0][0].lower()
     assert captured[0][1] == ("test-doctor",)
+
+
+def test_logout_requires_post_and_csrf(application):
+    app, users = application
+    with app.test_client() as client:
+        with client.session_transaction() as sess:
+            sess['logged_in'] = True
+            sess['username'] = 'test-doctor'
+            sess['account_fingerprint'] = 'test-fingerprint'
+        assert client.get('/logout').status_code == 405
+        assert client.post('/logout').status_code == 400
+        token = csrf_token(client, '/')
+        assert client.post('/logout', data={'csrf_token': token}).status_code in (302, 303)
+        with client.session_transaction() as sess:
+            assert 'logged_in' not in sess
+
+
+def test_revoked_account_session_cannot_access_reports(application):
+    app, users = application
+    with app.test_client() as client:
+        with client.session_transaction() as sess:
+            sess['logged_in'] = True
+            sess['username'] = 'revoked-doctor'
+            sess['account_fingerprint'] = 'old-fingerprint'
+        assert client.get('/download-report').status_code == 401
+        with client.session_transaction() as sess:
+            assert 'logged_in' not in sess
