@@ -29,3 +29,4 @@ uploads/*
 build/
 dist/
 *.egg-info/
+/CURATED_COLON_DISEASE/5.Project Executable Files/Flask/uploads/
