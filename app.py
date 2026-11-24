@@ -1,9 +1,16 @@
 import os
-os.environ['KERAS_BACKEND'] = 'tensorflow'
 from dotenv import load_dotenv
 
+# Load environment variables from .env
 load_dotenv()
+
+# Use TensorFlow as the Keras backend
+os.environ["KERAS_BACKEND"] = "tensorflow"
+
 from flask import Flask, request, render_template, redirect, url_for, session, send_file
+from flask_limiter import Limiter
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter.util import get_remote_address
 from keras.preprocessing.image import load_img, img_to_array
 from keras.models import load_model
 import numpy as np
@@ -14,20 +21,36 @@ import pandas as pd
 from functools import wraps
 import io
 import json
+import uuid
+from pathlib import Path
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from PIL import Image, UnidentifiedImageError
 
 app = Flask(__name__)
-app.secret_key = os.environ['FLASK_SECRET_KEY']  # Change in production
+CSRFProtect(app)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    storage_uri=os.environ.get('RATELIMIT_STORAGE_URI', 'memory://'),
+    default_limits=[],
+)
+app.secret_key = os.environ.get('FLASK_SECRET_KEY')
+if not app.secret_key:
+    raise RuntimeError('FLASK_SECRET_KEY must be set to a strong random value')
+app.config.update(MAX_CONTENT_LENGTH=8 * 1024 * 1024, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax', SESSION_COOKIE_SECURE=os.getenv('COOKIE_SECURE', 'true').lower() == 'true')
 
 # MySQL Database Configuration
 DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'user': os.environ['DB_USER'],
-    'password': os.environ['DB_PASSWORD'],
-    'database': os.getenv('DB_NAME', 'colon_disease_db')
+    'host': os.environ.get('DB_HOST', 'localhost'),
+    'user': os.environ.get('DB_USER', 'colon_app'),
+    'password': os.environ.get('DB_PASSWORD', ''),
+    'database': os.environ.get('DB_NAME', 'colon_disease_db')
+
 }
 
 # Load your model
-model = load_model('model_1/Vgg.h5')
+model = load_model(str(Path(__file__).resolve().parent / 'model_1' / 'Vgg.h5'), compile=False)
 
 print('Model Loaded!')
 
@@ -43,38 +66,9 @@ def get_db_connection():
         return None
 
 # Save Prediction to Database
-def ensure_predictions_user_column():
-    """Ensure predictions table has a username column to support per-user data."""
-    connection = get_db_connection()
-    if not connection:
-        return False
-    try:
-        cursor = connection.cursor()
-        check_query = """
-            SELECT COUNT(*) FROM information_schema.columns
-            WHERE table_schema = %s AND table_name = 'predictions' AND column_name = 'username'
-        """
-        cursor.execute(check_query, (DB_CONFIG['database'],))
-        exists = cursor.fetchone()[0] > 0
-        if not exists:
-            alter_query = "ALTER TABLE predictions ADD COLUMN username VARCHAR(255) AFTER confidence"
-            cursor.execute(alter_query)
-            connection.commit()
-            print("Added username column to predictions table for per-user tracking")
-        cursor.close()
-        connection.close()
-        return True
-    except Error as e:
-        print(f"Schema check/add error: {e}")
-        connection.close()
-        return False
-
-
 def save_prediction_to_db(filename, predicted_class, confidence, image_path, username=None):
     """Insert prediction result into MySQL database with user association"""
-    # Ensure schema supports username; if not, attempt to add it
-    ensure_predictions_user_column()
-
+    # Database schema migrations must be performed separately from predictions.
     connection = get_db_connection()
     if connection:
         try:
@@ -85,7 +79,7 @@ def save_prediction_to_db(filename, predicted_class, confidence, image_path, use
             """
             cursor.execute(query, (filename, predicted_class, float(confidence), image_path, username))
             connection.commit()
-            print(f"Prediction saved: {filename} -> {predicted_class} ({confidence:.4f}) for user {username}")
+            app.logger.info('Prediction stored for authenticated user')
             cursor.close()
             connection.close()
             return True
@@ -100,28 +94,42 @@ def save_prediction_to_db(filename, predicted_class, confidence, image_path, use
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'logged_in' not in session:
+        if session.get('logged_in') is not True or not session.get('username'):
             return render_template('auth_required.html', redirect_page=f.__name__)
         return f(*args, **kwargs)
     return decorated_function
 
 # Verify Doctor Credentials
 def verify_doctor_credentials(username, password):
-    """Verify doctor login credentials against MySQL database"""
+    """Verify only password-hashed doctor accounts; legacy plaintext accounts must reset."""
+    if not username or not password:
+        return False
     connection = get_db_connection()
-    if connection:
-        try:
-            cursor = connection.cursor()
-            query = "SELECT * FROM users WHERE username = %s AND password = %s AND role = 'doctor'"
-            cursor.execute(query, (username, password))
-            user = cursor.fetchone()
-            cursor.close()
-            connection.close()
-            return user is not None
-        except Error as e:
-            print(f"Authentication error: {e}")
+    if connection is None:
+        return False
+    cursor = None
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT password FROM users WHERE username = %s AND role = %s",
+            (username, 'doctor'),
+        )
+        user = cursor.fetchone()
+        if not user:
             return False
-    return False
+        stored_hash = user[0]
+        if not stored_hash or not (
+            stored_hash.startswith('scrypt:') or stored_hash.startswith('pbkdf2:')
+        ):
+            return False
+        return check_password_hash(stored_hash, password)
+    except (Error, ValueError) as exc:
+        app.logger.warning("Doctor authentication failed: %s", type(exc).__name__)
+        return False
+    finally:
+        if cursor is not None:
+            cursor.close()
+        connection.close()
 
 # Check if user exists
 def user_exists(username):
@@ -150,7 +158,7 @@ def register_user(username, password, email=None, role='doctor'):
             cursor = connection.cursor()
             # Insert only the available columns to match existing schema
             query = "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)"
-            cursor.execute(query, (username, password, role))
+            cursor.execute(query, (username, generate_password_hash(password), 'doctor'))
             connection.commit()
             cursor.close()
             connection.close()
@@ -160,6 +168,10 @@ def register_user(username, password, email=None, role='doctor'):
             return False
     return False
 
+@app.get('/healthz')
+def healthz():
+    return {'status': 'ok', 'service': 'wce-demo'}, 200
+
 @app.route('/')
 def index():
     is_logged_in = 'logged_in' in session
@@ -167,12 +179,16 @@ def index():
 
 @app.route('/signup-page')
 def signup_page():
-    """Display Signup Page"""
+    """Display Signup Page only in explicitly enabled demo environments."""
+    if os.getenv('WCE_ALLOW_SELF_SIGNUP', 'false').lower() != 'true':
+        return 'Public doctor registration is disabled', 403
     return render_template('signup.html')
 
 @app.route('/signup', methods=['POST'])
 def signup():
-    """User Signup Route"""
+    """Demo-only user signup; real doctor accounts require verified provisioning."""
+    if os.getenv('WCE_ALLOW_SELF_SIGNUP', 'false').lower() != 'true':
+        return 'Public doctor registration is disabled', 403
     username = request.form.get('signup_username')
     password = request.form.get('signup_password')
     confirm_password = request.form.get('signup_confirm_password')
@@ -189,11 +205,14 @@ def signup():
                              error_signup="Passwords do not match",
                              is_logged_in=False)
     
-    if len(password) < 6:
+    if len(password) < 12:
         return render_template('index.html', 
-                             error_signup="Password must be at least 6 characters",
+                             error_signup="Password must be at least 12 characters",
                              is_logged_in=False)
     
+    if len(username) > 50 or not username.replace('_', '').isalnum():
+        return render_template('index.html', error_signup='Use a valid username (letters, numbers, underscores; max 50)', is_logged_in=False)
+
     if user_exists(username):
         return render_template('index.html', 
                              error_signup="Username already exists",
@@ -215,6 +234,7 @@ def login_page():
     return render_template('login.html')
 
 @app.route('/login-home', methods=['POST'])
+@limiter.limit('5 per minute')
 def login_home():
     """Doctor Login Route from Home Page"""
     username = request.form.get('login_username')
@@ -222,6 +242,7 @@ def login_home():
     error = None
     
     if verify_doctor_credentials(username, password):
+        session.clear()
         session['logged_in'] = True
         session['username'] = username
         return render_template('index.html', 
@@ -251,7 +272,9 @@ def about():
 @app.route('/predict')
 def predict():
     is_logged_in = 'logged_in' in session
-    return render_template('details.html', is_logged_in=is_logged_in)
+    if not is_logged_in or not session.get('username'):
+        return redirect(url_for('login_page'))
+    return render_template('details.html', is_logged_in=True)
 
 @app.route('/contact')
 def contact():
@@ -292,8 +315,10 @@ def analysis():
                     base_query += " AND prediction_timestamp >= %s"
                     params.append(start_date)
                 query = base_query + " ORDER BY prediction_timestamp DESC"
-                df = pd.read_sql(query, connection, params=tuple(params))
-                connection.close()
+                try:
+                    df = pd.read_sql(query, connection, params=tuple(params))
+                finally:
+                    connection.close()
                 
                 if df.empty:
                     return render_template('analysis.html', 
@@ -332,11 +357,9 @@ def analysis():
                 return render_template('analysis.html', stats=stats, is_logged_in=True, selected_range=range_option)
                 
             except Exception as e:
-                print(f"Analysis error: {e}")
-                import traceback
-                traceback.print_exc()
+                app.logger.exception('Analysis query or rendering failed')
                 return render_template('analysis.html', 
-                                     error=f"Error generating analysis: {str(e)}",
+                                     error='Analysis temporarily unavailable. Please try again later.',
                                      is_logged_in=True,
                                      selected_range=range_option)
         else:
@@ -345,10 +368,8 @@ def analysis():
                                  is_logged_in=True,
                                  selected_range=range_option)
     except Exception as e:
-        print(f"Critical error in analysis route: {e}")
-        import traceback
-        traceback.print_exc()
-        return f"Error: {str(e)}", 500
+        app.logger.exception('Analysis request failed')
+        return 'Analysis temporarily unavailable', 500
 
 @app.route('/download-report')
 @login_required
@@ -363,13 +384,15 @@ def download_report():
         try:
             # Query all predictions data
             query = """
-                SELECT id, filename, predicted_class, confidence, prediction_timestamp, image_path
+                SELECT id, predicted_class, confidence, prediction_timestamp
                 FROM predictions
                 WHERE username = %s
                 ORDER BY prediction_timestamp DESC
             """
-            df = pd.read_sql(query, connection, params=(username,))
-            connection.close()
+            try:
+                df = pd.read_sql(query, connection, params=(username,))
+            finally:
+                connection.close()
             
             if df.empty:
                 return "No prediction data available to download for this user.", 404
@@ -395,8 +418,9 @@ def download_report():
                 download_name=filename
             )
             
-        except Error as e:
-            return f"Database error: {e}", 500
+        except Exception:
+            app.logger.exception('Report generation failed')
+            return 'Report temporarily unavailable', 500
     else:
         return "Database connection failed", 500
 
@@ -404,39 +428,58 @@ def download_report():
 @login_required
 def result():
     if request.method == 'POST':
-        f = request.files['image']
+        f = request.files.get('image')
+        if not f or not f.filename:
+            return 'Image upload is required', 400
+        original_name = secure_filename(f.filename)
+        if Path(original_name).suffix.lower() not in {'.jpg', '.jpeg', '.png'}:
+            return 'Only JPG and PNG images are supported', 400
         username = session.get('username')
         if not username:
             return redirect(url_for('login_page'))
-        
-        basepath = os.path.dirname(__file__)
-        upload_folder = os.path.join(basepath, 'uploads')
+
+        upload_folder = os.path.join(os.path.dirname(__file__), 'uploads')
         os.makedirs(upload_folder, exist_ok=True)
-        
-        filepath = os.path.join(upload_folder, f.filename)
-        f.save(filepath)
-        
+        filename = f"{uuid.uuid4().hex}{Path(original_name).suffix.lower()}"
+        filepath = os.path.join(upload_folder, filename)
+        try:
+            f.save(filepath)
+            with Image.open(filepath) as uploaded_image:
+                uploaded_image.verify()
+        except (OSError, UnidentifiedImageError, ValueError):
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return 'Invalid image file', 400
+
         # Read and preprocess the image
-        img = load_img(filepath, target_size=(224, 224))
-        x = img_to_array(img)
-        x = np.expand_dims(x, axis=0)
-        x = x / 255.0  # Normalize the image
-        
-        # Make predictions using the model
-        predictions = model.predict(x)
+        try:
+            img = load_img(filepath, target_size=(224, 224))
+            x = img_to_array(img)
+            x = np.expand_dims(x, axis=0)
+            x = x / 255.0  # Normalize the image
+            predictions = model.predict(x)
+        except Exception:
+            app.logger.exception('Model inference failed')
+            os.remove(filepath)
+            return 'Prediction temporarily unavailable', 503
+        if getattr(predictions, 'shape', None) != (1, 4) or not np.all(np.isfinite(predictions)):
+            os.remove(filepath)
+            return 'Invalid prediction output', 503
         class_index = np.argmax(predictions, axis=1)[0]
         class_names = ['Normal', 'Ulcerative Colitis', 'Polyps', 'Esophagitis']
         predicted_class = class_names[class_index]
         confidence = predictions[0][class_index]
         
         # Save prediction to MySQL database
-        save_prediction_to_db(
-            filename=f.filename,
+        if not save_prediction_to_db(
+            filename=original_name,
             predicted_class=predicted_class,
             confidence=confidence,
             image_path=filepath,
             username=username
-        )
+        ):
+            os.remove(filepath)
+            return 'Prediction could not be saved', 503
         
         result_text = f"Prediction: {predicted_class} with confidence {confidence:.2f}"
         
@@ -452,4 +495,4 @@ if __name__ == '__main__':
     print("========================\n")
     
     port = int(os.environ.get('PORT', 5000))
-    app.run(host="127.0.0.1", port=5000, debug=False)  # Disable reloader to prevent crashes
+    app.run(host='127.0.0.1', port=port, debug=False, use_reloader=False)  # Development only
