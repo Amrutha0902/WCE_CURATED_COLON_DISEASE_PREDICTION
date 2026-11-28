@@ -93,6 +93,20 @@ def get_db_connection():
         app.logger.error('Database connection failed: %s', type(e).__name__)
         return None
 
+def query_to_dataframe(connection, query, params=()):
+    """Execute parameterized SQL and return a Pandas DataFrame."""
+    cursor = connection.cursor()
+    try:
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        columns = [column[0] for column in cursor.description]
+        return pd.DataFrame.from_records(
+            rows, columns=columns, coerce_float=True
+        )
+    finally:
+        cursor.close()
+
+
 # Save Prediction to Database
 def save_prediction_to_db(filename, predicted_class, confidence, image_path, username=None):
     """Insert prediction result into MySQL database with user association"""
@@ -379,7 +393,7 @@ def analysis():
                     params.append(start_date)
                 query = base_query + " ORDER BY prediction_timestamp DESC"
                 try:
-                    df = pd.read_sql(query, connection, params=tuple(params))
+                    df = query_to_dataframe(connection, query, tuple(params))
                 finally:
                     connection.close()
                 
@@ -453,7 +467,7 @@ def download_report():
                 ORDER BY prediction_timestamp DESC
             """
             try:
-                df = pd.read_sql(query, connection, params=(username,))
+                df = query_to_dataframe(connection, query, (username,))
             finally:
                 connection.close()
             

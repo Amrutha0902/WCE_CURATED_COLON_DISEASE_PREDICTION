@@ -33,18 +33,18 @@ Flask application (app.py)
 | Backend | Python 3.11, Flask, Flask-WTF, Flask-Limiter, Werkzeug |
 | ML inference | TensorFlow 2.21.0, Keras, NumPy, Pillow, saved VGG model |
 | Persistence and reporting | MySQL 8, mysql-connector-python, Pandas |
-| Quality checks | pytest, GitHub Actions, Docker image build |
+| Infrastructure | Docker, Gunicorn, Redis |
+| Quality checks | pytest, GitHub Actions, pip-audit |
 
 The exact dependency constraints are in [requirements.txt](requirements.txt); do not use old JAX installation instructions.
 
 ## Local setup (Windows PowerShell)
 
-1. Install **Python 3.11** and MySQL 8. Clone the repository and switch to the security branch while PR #1 is under review:
+1. Install **Python 3.11** and MySQL 8. Clone the repository:
 
    ```powershell
    git clone https://github.com/Amrutha0902/WCE_CURATED_COLON_DISEASE_PREDICTION.git
    cd WCE_CURATED_COLON_DISEASE_PREDICTION
-   git switch security/wce-hardening-2026
    py -3.11 -m venv .venv
    .\.venv\Scripts\Activate.ps1
    python -m pip install -r requirements.txt
@@ -60,6 +60,8 @@ The exact dependency constraints are in [requirements.txt](requirements.txt); do
    DB_PASSWORD=your_unique_database_password
    DB_NAME=colon_disease_db
    FLASK_SECRET_KEY=your_unique_random_signing_secret
+   WCE_PRODUCTION=false
+   RATELIMIT_STORAGE_URI=memory://
    COOKIE_SECURE=false
    WCE_ALLOW_SELF_SIGNUP=false
    KERAS_BACKEND=tensorflow
@@ -101,29 +103,47 @@ The exact dependency constraints are in [requirements.txt](requirements.txt); do
 
 ## Testing and CI
 
-The security branch has a six-job workflow at [GitHub Actions](https://github.com/Amrutha0902/WCE_CURATED_COLON_DISEASE_PREDICTION/actions):
+The production-readiness branch defines a seven-job workflow at [GitHub Actions](https://github.com/Amrutha0902/WCE_CURATED_COLON_DISEASE_PREDICTION/actions):
 
 | Job | What it verifies |
 | --- | --- |
+| `dependency-audit` | Dependency vulnerability scanning |
 | `static-security-checks` | Flask request-level checks with isolated substitutes and source-level assertions |
 | `mysql-integration` | Real queries, password hashing and user-scoped inserts against disposable MySQL 8 |
 | `model-smoke` | Real saved-model deserialization and synthetic CPU inference with TensorFlow |
 | `full-e2e` | Synthetic-image HTTP upload, real VGG inference, login, disposable MySQL persistence and analysis |
-| `docker-build` | Docker image build and Compose configuration validation; **not** running-container verification |
+| `redis-integration` | Shared rate limits, failure handling and production configuration guards |
+| `docker-build` | Compose validation, image build, container startup, non-root execution and Redis connectivity |
 
-The table lists five named jobs from the earlier workflow; consult the current workflow file for the additional job and its checks.
+Live Redis and Docker runtime verification remain pending.
 
-**Six CI jobs have been reported passing on the remediation branch.** Check the latest [GitHub Actions runs](https://github.com/Amrutha0902/WCE_CURATED_COLON_DISEASE_PREDICTION/actions) for the exact commit and current results. Passing CI does not establish clinical efficacy or constitute a full penetration test.
+**Earlier CI results do not establish verification of the latest production-readiness changes.** Check the latest [GitHub Actions runs](https://github.com/Amrutha0902/WCE_CURATED_COLON_DISEASE_PREDICTION/actions) for the exact commit and current results. Passing CI does not establish clinical efficacy or constitute a full penetration test.
 
-For a regular local test run:
+For local regression testing, run each test group separately:
 
 ```powershell
-$env:KERAS_BACKEND = "tensorflow"
+$env:WCE_PRODUCTION = "false"
+$env:RATELIMIT_STORAGE_URI = "memory://"
+$env:WCE_MYSQL_TEST = "0"
+$env:WCE_E2E_TEST = "0"
+$env:WCE_REDIS_TEST = "0"
+
 python -m pip check
-python -m pytest -q
+python -m pytest -q tests/test_flask_security.py tests/test_security_contract.py
+python -m pytest -q tests/test_model_smoke.py
 ```
 
-MySQL and full end-to-end tests are skipped by default; they require explicitly enabled flags and the dedicated **disposable** database named `colon_disease_db_test`. Do not enable them against the original application database.
+### Local verification results
+
+- Flask security tests: 13 passed.
+- Static security tests: 7 passed.
+- Real MySQL integration: 2 passed.
+- Real VGG model smoke test: 1 passed.
+- Synthetic-image HTTP-to-MySQL E2E: 1 passed.
+- Dependency consistency: no broken requirements.
+- Redis integration: 5 tests implemented; execution pending.
+
+MySQL and E2E tests require explicit opt-in flags and the disposable database colon_disease_db_test. Redis tests require an isolated Redis service. Never run integration tests against production data.
 
 ## Docker demo (localhost only)
 
@@ -134,7 +154,7 @@ docker compose config
 docker compose up --build
 ```
 
-Visit `http://127.0.0.1:8000`. **Do not expose this demo to the public Internet or use patient data.** The CI pipeline builds the image but has not established production deployment security or container runtime behavior. Persistent MySQL volumes are not automatically migrated.
+Visit `http://127.0.0.1:8000`. **Do not expose this demo to the public Internet or use patient data.** CI now includes container runtime validation. Execution results remain pending. Persistent MySQL volumes are not automatically migrated.
 
 ## Dataset sources and attribution
 
@@ -144,7 +164,7 @@ The model-training notebooks reference the [Curated Colon Dataset for Deep Learn
 - **ETIS-Larib-Polyp DB:** J. Silva et al., *Toward embedded detection of polyps in WCE images for early diagnosis of colorectal cancer*, International Journal of Computer Assisted Radiology and Surgery 9, 283–293 (2013). [DOI: 10.1007/s11548-013-0926-3](https://doi.org/10.1007/s11548-013-0926-3).
 - **Related study cited in the dataset description:** F. J. P. Montalbo, *Diagnosing Gastrointestinal Diseases from Endoscopy Images through a Multi-Fused CNN with Auxiliary Layers, Alpha Dropouts, and a Fusion Residual Block*, Biomedical Signal Processing and Control 76 (2022). [DOI: 10.1016/j.bspc.2022.103683](https://doi.org/10.1016/j.bspc.2022.103683).
 
-**Licensing and provenance:** The supplied dataset description does not establish permission to redistribute individual medical images. All 14 legacy JPGs in the archived Flask `uploads/` directory failed byte-for-byte SHA256 matching against the locally downloaded dataset; this does not rule out transformed copies. They are being removed from current Git tracking pending source, permission, and privacy verification. Historical Git commits may still contain them. Do not commit patient images or identifying data.
+**Licensing and provenance:** The supplied dataset description does not establish permission to redistribute individual medical images. All 14 legacy JPGs in the archived Flask `uploads/` directory failed byte-for-byte SHA256 matching against the locally downloaded dataset; this does not rule out transformed copies. The identified legacy uploads were removed from Git tracking and rewritten repository history. Previously downloaded copies and external backups may still exist. Do not commit patient images or identifying data.
 
 ## Model evaluation (not yet completed)
 
@@ -158,14 +178,25 @@ python scripts/evaluate_vgg.py --manifest "path\to\test_manifest.csv" --image-ro
 
 ## Security status and limitations
 
-The security branch improves credential configuration, password hashing, CSRF, login throttling, basic upload validation and user-scoped reporting. It is **not production-ready**. The outstanding issues include:
+The hardened application improves credential configuration, password hashing, CSRF, login throttling, basic upload validation and user-scoped reporting. It is **not production-ready**. The outstanding issues include:
 
-- Previously exposed credentials in Git history require rotation and incident review; deleting current-file secrets does not erase history.
+- Identified sensitive Git history was rewritten and local credentials were rotated. External credential rotation and historical exposure impact remain unverified.
 - Legacy plaintext-password accounts need verified reset/re-provisioning; no public doctor credential verification workflow exists.
 - Production mode (`WCE_PRODUCTION=true`) requires a Redis `RATELIMIT_STORAGE_URI`, secure cookies, and disabled self-signup. The limiter has no in-memory fallback; a Redis outage may cause request failures rather than bypassing throttling. Development mode may use in-memory storage, which is unsuitable for multi-worker production use.
 - Uploads have an 8 MiB request limit and configured image-dimension checks (20 million pixels; 8192 pixels per edge), but these do not guarantee hard CPU/memory/inference limits. Temporary uploads are deleted on the normal completion path; deletion failures, legacy stored images, and retention/access policies still need review.
 - Model class mapping, clinical performance, privacy controls, and running-container security require further validation.
 
-See [SECURITY.md](SECURITY.md) and [the security-hardening PR](https://github.com/Amrutha0902/WCE_CURATED_COLON_DISEASE_PREDICTION/pull/1) for details.
+See [SECURITY.md](SECURITY.md) and [PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATION.md) for details.
 
-**Status: Locally tested portfolio/research demo; security-hardening PR under review. Not a medical device or clinical decision-support system.**
+**Status: Locally tested portfolio/research demo. Production-readiness CI validation pending. Not a medical device or clinical decision-support system.**
+
+## Repository cleanup
+
+- Removed the obsolete duplicate Flask application and model.
+- Removed 20 legacy academic PDFs and reference templates.
+- Preserved the primary Flask application and VGG16 model.
+- Preserved all three training notebooks with their original cell sources.
+- Removed 64 stored notebook outputs and reset execution counts.
+- Verified all 24 local regression tests after cleanup.
+- Historical Git copies of removed assets may still exist.
+- Live Redis, Docker runtime and dependency vulnerability validation remain pending.

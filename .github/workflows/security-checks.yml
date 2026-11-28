@@ -5,6 +5,7 @@ on:
     branches:
       - security/wce-hardening-2026
       - security/post-audit-remediation-2026
+      - feature/wce-production-readiness
 
 jobs:
   dependency-audit:
@@ -83,8 +84,6 @@ jobs:
           python-version: '3.11'
       - name: Install real model runtime dependencies
         run: python -m pip install -r requirements.txt
-      - name: Install full declared application dependencies
-        run: python -m pip install -r requirements.txt
       - name: Deserialize model and run single CPU inference
         run: python -m pytest -q tests/test_model_smoke.py
       - name: Import real Flask application with saved model
@@ -131,7 +130,34 @@ jobs:
         run: |
           sed 's/colon_disease_db/colon_disease_db_test/g' setup_database.sql | mysql -h 127.0.0.1 -uroot
       - name: Test complete real model HTTP workflow
-        run: python -m pytest -q tests/test_full_e2e.py
+        run: python -m pytest -q tests/test_full_e2e.py -W 'error:pandas only supports:UserWarning'
+
+  redis-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+    env:
+      WCE_REDIS_TEST: '1'
+      WCE_TEST_REDIS_URI: redis://127.0.0.1:6379/15
+      KERAS_BACKEND: tensorflow
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install application dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Test production Redis rate limiting
+        run: python -m pytest -v tests/test_redis_integration.py --tb=short
 
   docker-build:
     runs-on: ubuntu-latest
@@ -146,3 +172,54 @@ jobs:
         run: docker compose config --quiet
       - name: Build reproducible application image
         run: docker build -t wce-ci-smoke .
+      - name: Create isolated Docker network and Redis service
+        run: |
+          docker network create wce-ci-network
+          docker run -d --name wce-ci-redis --network wce-ci-network redis:7-alpine
+          for i in $(seq 1 30); do
+            if docker exec wce-ci-redis redis-cli ping | grep -q PONG; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: Start production application container
+        run: |
+          docker run -d --name wce-ci-web \
+            --network wce-ci-network \
+            -p 127.0.0.1:8000:8000 \
+            -e WCE_PRODUCTION=true \
+            -e COOKIE_SECURE=true \
+            -e WCE_ALLOW_SELF_SIGNUP=false \
+            -e RATELIMIT_STORAGE_URI=redis://wce-ci-redis:6379/0 \
+            -e FLASK_SECRET_KEY=disposable-ci-runtime-secret-123456789 \
+            wce-ci-smoke
+
+      - name: Verify application HTTP readiness
+        run: |
+          for i in $(seq 1 60); do
+            status=$(curl --silent --max-time 5 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/ || true)
+            if [ "$status" = "200" ]; then
+              echo "Application startup verified"
+              exit 0
+            fi
+            sleep 3
+          done
+          docker logs wce-ci-web
+          exit 1
+
+      - name: Verify non-root execution and Redis connectivity
+        run: |
+          docker exec wce-ci-web python -c "import os; assert os.getuid() != 0"
+          docker exec wce-ci-web python -c "import os, redis; assert redis.Redis.from_url(os.environ['RATELIMIT_STORAGE_URI']).ping()"
+
+      - name: Display container logs on failure
+        if: failure()
+        run: docker logs wce-ci-web || true
+
+      - name: Clean up disposable containers
+        if: always()
+        run: |
+          docker rm -f wce-ci-web wce-ci-redis || true
+          docker network rm wce-ci-network || true

@@ -2,6 +2,7 @@
 
 No patient data is used. This test does not measure clinical accuracy.
 """
+import csv
 import io
 import os
 import re
@@ -82,8 +83,42 @@ def test_real_model_http_to_mysql_roundtrip():
             assert rows[0][2] in ('', None)
             assert rows[0][3] in ('', None), 'Original patient filename must not persist'
             # Stored metadata no longer contains a filesystem path.
-            response = client.get("/analysis")
+            # Verify analytics renders successfully.
+            for date_range in ("till_date", "week"):
+                response = client.get(
+                    "/analysis", query_string={"range": date_range}
+                )
+                assert response.status_code == 200
+                assert b"temporarily unavailable" not in response.data
+                assert b"No prediction data" not in response.data
+                assert b"Database connection failed" not in response.data
+                assert rows[0][0].encode() in response.data
+
+            # Verify real CSV report generation.
+            response = client.get("/download-report")
             assert response.status_code == 200
+            assert response.mimetype == "text/csv"
+            assert "attachment" in response.headers["Content-Disposition"]
+
+            reader = csv.DictReader(
+                io.StringIO(response.data.decode("utf-8"))
+            )
+            assert reader.fieldnames == [
+                "id",
+                "predicted_class",
+                "confidence",
+                "prediction_timestamp",
+            ]
+
+            report_rows = list(reader)
+            assert len(report_rows) == 1
+            assert report_rows[0]["predicted_class"] == rows[0][0]
+            assert float(report_rows[0]["confidence"]) == pytest.approx(
+                float(rows[0][1])
+            )
+            assert report_rows[0]["prediction_timestamp"]
+            assert "synthetic.png" not in response.data.decode("utf-8")
+
     finally:
         cursor = connection.cursor()
         cursor.execute("DELETE FROM predictions WHERE username=%s", (username,))
