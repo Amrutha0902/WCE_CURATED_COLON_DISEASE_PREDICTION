@@ -115,9 +115,9 @@ The production-readiness branch defines a seven-job workflow at [GitHub Actions]
 | `redis-integration` | Shared rate limits, failure handling and production configuration guards |
 | `docker-build` | Compose validation, image build, container startup, non-root execution and Redis connectivity |
 
-Live Redis and Docker runtime verification remain pending.
+Live Redis integration and Docker runtime verification passed in GitHub Actions workflow #114.
 
-**Earlier CI results do not establish verification of the latest production-readiness changes.** Check the latest [GitHub Actions runs](https://github.com/Amrutha0902/WCE_CURATED_COLON_DISEASE_PREDICTION/actions) for the exact commit and current results. Passing CI does not establish clinical efficacy or constitute a full penetration test.
+**All seven CI jobs passed for commit 92dc472 in workflow #114.** Check the latest [GitHub Actions runs](https://github.com/Amrutha0902/WCE_CURATED_COLON_DISEASE_PREDICTION/actions) for the exact commit and current results. Passing CI does not establish clinical efficacy or constitute a full penetration test.
 
 For local regression testing, run each test group separately:
 
@@ -141,7 +141,7 @@ python -m pytest -q tests/test_model_smoke.py
 - Real VGG model smoke test: 1 passed.
 - Synthetic-image HTTP-to-MySQL E2E: 1 passed.
 - Dependency consistency: no broken requirements.
-- Redis integration: 5 tests implemented; execution pending.
+- Redis integration: 5 tests passed in GitHub Actions.
 
 MySQL and E2E tests require explicit opt-in flags and the disposable database colon_disease_db_test. Redis tests require an isolated Redis service. Never run integration tests against production data.
 
@@ -154,7 +154,7 @@ docker compose config
 docker compose up --build
 ```
 
-Visit `http://127.0.0.1:8000`. **Do not expose this demo to the public Internet or use patient data.** CI now includes container runtime validation. Execution results remain pending. Persistent MySQL volumes are not automatically migrated.
+Visit `http://127.0.0.1:8000`. **Do not expose this demo to the public Internet or use patient data.** Container runtime validation passed in GitHub Actions workflow #114. Persistent MySQL volumes are not automatically migrated.
 
 ## Dataset sources and attribution
 
@@ -188,7 +188,7 @@ The hardened application improves credential configuration, password hashing, CS
 
 See [SECURITY.md](SECURITY.md) and [PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATION.md) for details.
 
-**Status: Locally tested portfolio/research demo. Production-readiness CI validation pending. Not a medical device or clinical decision-support system.**
+**Status: Locally tested portfolio/research demo. All seven production-readiness CI jobs passed. Not a medical device or clinical decision-support system.**
 
 ## Repository cleanup
 
@@ -199,4 +199,4 @@ See [SECURITY.md](SECURITY.md) and [PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTAT
 - Removed 64 stored notebook outputs and reset execution counts.
 - Verified all 24 local regression tests after cleanup.
 - Historical Git copies of removed assets may still exist.
-- Live Redis, Docker runtime and dependency vulnerability validation remain pending.
+- Live Redis, Docker runtime and dependency vulnerability checks passed in CI.

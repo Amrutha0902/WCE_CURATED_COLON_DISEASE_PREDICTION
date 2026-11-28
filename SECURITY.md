@@ -33,7 +33,7 @@ External deployment credentials, historical database access and incident impact 
 | Password hashing | Implemented and locally tested |
 | CSRF protection | Implemented and locally tested |
 | Login rate limiting | Local behavior tested |
-| Shared Redis rate limiting | Configured; integration tests pending |
+| Shared Redis rate limiting | Configured; integration tests passed in CI |
 | Redis failure handling | Configured without memory fallback |
 | Secure session cookies | Required in production mode |
 | Session lifetime | Eight hours for permanent sessions |
@@ -46,8 +46,8 @@ External deployment credentials, historical database access and incident impact 
 | Temporary image cleanup | Implemented on successful processing |
 | Prediction metadata minimization | Implemented |
 | Public doctor registration | Disabled by default |
-| Non-root Docker execution | Configured; runtime verification pending |
-| Dependency vulnerability scanning | Configured in CI |
+| Non-root Docker execution | Configured; runtime verification passed in CI |
+| Dependency vulnerability scanning | Passed in CI workflow #114 |
 
 ## 4. Production Configuration
 
@@ -141,7 +141,7 @@ Local engineering results:
 | Real model smoke test | 1 passed |
 | Full HTTP-to-MySQL E2E | 1 passed |
 | Total | 24 passed |
-| Redis integration | 5 tests awaiting execution |
+| Redis integration | 5 tests passed in CI |
 
 Dependency consistency checks reported no broken requirements.
 
@@ -158,7 +158,7 @@ These new checks must execute successfully before their behavior can be consider
 | High | Independently validate model labels and patient-disjoint performance |
 | High | Establish medical-data privacy and retention governance |
 | High | Isolate inference with hard resource limits |
-| High | Verify live Redis integration and failure behavior |
+| High | Monitor Redis availability and validate failure handling in deployment |
 | High | Verify container runtime and deployment infrastructure |
 | Medium | Configure trusted proxies, HTTPS and operational monitoring |
 | Medium | Conduct independent penetration testing |

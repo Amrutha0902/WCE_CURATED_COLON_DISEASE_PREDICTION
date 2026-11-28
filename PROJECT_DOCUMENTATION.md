@@ -141,7 +141,7 @@ The Compose demonstration is not intended for public deployment.
 
 CI includes image construction, production-mode startup, non-root execution and Redis connectivity checks.
 
-Live execution of the newly added runtime checks remains pending.
+The newly added runtime checks passed in GitHub Actions workflow #114.
 
 ## 10. Testing and Quality Assurance
 
@@ -155,7 +155,7 @@ Local engineering verification:
 | Real VGG inference | 1 passed |
 | HTTP-to-MySQL end-to-end | 1 passed |
 | Total | 24 passed |
-| Redis integration | 5 tests awaiting execution |
+| Redis integration | 5 tests passed in CI |
 
 Local regression testing was performed using Python 3.12.10 on Windows.
 
@@ -173,7 +173,7 @@ The workflow defines seven jobs:
 - redis-integration
 - docker-build
 
-The latest production-readiness changes require successful CI execution before integration is considered verified.
+All seven CI jobs passed for commit 92dc472 in workflow #114.
 
 ## 12. Repository Structure
 
@@ -206,7 +206,7 @@ The latest production-readiness changes require successful CI execution before i
 
 Locally tested full-stack machine learning portfolio project with security hardening, real database integration, automated regression tests and containerization.
 
-Production-readiness CI validation remains pending.
+Production-readiness CI validation passed across all seven jobs.
 
 Not a medical device or clinically validated diagnostic system.
 
@@ -221,4 +221,4 @@ Dataset attribution and evaluation instructions are maintained in README.md.
 - Removed 64 stored notebook outputs and reset execution counts.
 - Verified all 24 local regression tests after cleanup.
 - Historical Git copies of removed assets may still exist.
-- Live Redis, Docker runtime and dependency vulnerability validation remain pending.
+- Live Redis, Docker runtime and dependency vulnerability checks passed in CI.
