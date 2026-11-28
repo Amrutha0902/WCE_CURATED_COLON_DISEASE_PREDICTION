@@ -10,3 +10,28 @@ uploads/*
 !uploads/.gitkeep
 CURATED_COLON_DISEASE
 tests
+
+# Virtual environments
+.venv
+venv
+env
+**/.venv
+**/__pycache__
+
+# Development and testing artifacts
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+*.log
+
+# IDE configuration
+.vscode/
+.idea/
+
+# Database dumps and backups
+*.sql
+*.dump
+*.bak
+*.bundle
+*.patch
