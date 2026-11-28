@@ -3,6 +3,7 @@ on:
   pull_request:
   push:
     branches:
+      - main
       - security/wce-hardening-2026
       - security/post-audit-remediation-2026
       - feature/wce-production-readiness
