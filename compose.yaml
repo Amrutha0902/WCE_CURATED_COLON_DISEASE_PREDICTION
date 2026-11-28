@@ -18,6 +18,8 @@ services:
   web:
     build: .
     environment:
+      WCE_PRODUCTION: 'false'
+      RATELIMIT_STORAGE_URI: 'memory://'
       DB_HOST: mysql
       DB_USER: colon_app
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD locally}

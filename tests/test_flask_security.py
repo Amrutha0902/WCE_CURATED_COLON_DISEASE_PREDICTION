@@ -228,11 +228,21 @@ def test_auth_guard_rejects_session_without_username(application):
 def test_analysis_exception_does_not_disclose_internal_details(application, monkeypatch):
     app, _users = application
     module = app.view_functions["analysis"].__wrapped__.__globals__
-    class BrokenPandas:
-        @staticmethod
-        def read_sql(*args, **kwargs):
+    class BrokenCursor:
+        def execute(self, *args, **kwargs):
             raise RuntimeError("private-db-host-and-secret")
-    monkeypatch.setitem(module, "pd", BrokenPandas())
+
+        def close(self):
+            pass
+
+    class BrokenConnection:
+        def cursor(self):
+            return BrokenCursor()
+
+        def close(self):
+            pass
+
+    monkeypatch.setitem(module, "get_db_connection", BrokenConnection)
     with app.test_client() as client:
         with client.session_transaction() as sess:
             sess["logged_in"] = True
@@ -247,11 +257,21 @@ def test_analysis_exception_does_not_disclose_internal_details(application, monk
 def test_report_exception_does_not_disclose_internal_details(application, monkeypatch):
     app, _users = application
     module = app.view_functions["download_report"].__wrapped__.__globals__
-    class BrokenPandas:
-        @staticmethod
-        def read_sql(*args, **kwargs):
+    class BrokenCursor:
+        def execute(self, *args, **kwargs):
             raise RuntimeError("private-db-host-and-secret")
-    monkeypatch.setitem(module, "pd", BrokenPandas())
+
+        def close(self):
+            pass
+
+    class BrokenConnection:
+        def cursor(self):
+            return BrokenCursor()
+
+        def close(self):
+            pass
+
+    monkeypatch.setitem(module, "get_db_connection", BrokenConnection)
     with app.test_client() as client:
         with client.session_transaction() as sess:
             sess["logged_in"] = True
@@ -269,12 +289,33 @@ def test_report_excludes_uploaded_image_identifiers_from_query(application, monk
     captured = []
     class FakeFrame:
         empty = True
-    class CapturePandas:
-        @staticmethod
-        def read_sql(query, connection, params):
+    class CaptureCursor:
+        description = [("id",), ("predicted_class",),
+                       ("confidence",), ("prediction_timestamp",)]
+
+        def execute(self, query, params):
             captured.append((query, params))
+
+        def fetchall(self):
+            return []
+
+        def close(self):
+            pass
+
+    class CaptureConnection:
+        def cursor(self):
+            return CaptureCursor()
+
+        def close(self):
+            pass
+
+    class FakeDataFrame:
+        @staticmethod
+        def from_records(*args, **kwargs):
             return FakeFrame()
-    monkeypatch.setitem(module, "pd", CapturePandas())
+
+    monkeypatch.setitem(module, "get_db_connection", CaptureConnection)
+    monkeypatch.setattr(module["pd"], "DataFrame", FakeDataFrame, raising=False)
     with app.test_client() as client:
         with client.session_transaction() as sess:
             sess["logged_in"] = True
